@@ -46,27 +46,45 @@
         <!-- Content List -->
         <div class="content-list">
           <div 
-            v-for="item in filteredItems" 
+            v-for="(item, index) in filteredItems" 
             :key="item.id"
-            class="content-item"
-            :class="{ active: selectedItem?.id === item.id }"
+            :class="[
+              sidebarMode === 'outline' ? 'outline-item' : 'content-item',
+              { active: sidebarMode === 'outline' ? activeOutlineId === item.id : selectedItem?.id === item.id }
+            ]"
           >
             <div class="item-main" @click="selectItem(item)">
-              <div class="item-icon" :style="{ marginLeft: item.level ? (item.level-1)*8 + 'px' : '0px' }">
+              <!-- 大纲模式：显示折叠图标和缩进 -->
+              <template v-if="sidebarMode === 'outline'">
+                <div class="outline-indent" :style="{ width: (item.level-1)*12 + 'px' }"></div>
+                <div class="outline-toggle-icon" @click="toggleOutlineCollapse(item, $event)">
+                  <el-icon v-if="hasChildren(item)" size="14" class="collapse-icon">
+                    <ArrowRight v-if="collapsedOutlineIds.has(item.id)" />
+                    <ArrowDown v-else />
+                  </el-icon>
+                  <span v-else class="no-children-spacer"></span>
+                </div>
+              </template>
+              
+              <!-- 列表模式：显示图标 -->
+              <div v-else class="item-icon">
                 <el-icon size="16">
                   <Document v-if="item.type === 'note'" />
                   <Connection v-else />
                 </el-icon>
               </div>
+              
               <div class="item-info">
                 <div class="item-title">{{ item.title || item.text }}</div>
-                <div class="item-meta">
+                <div v-if="sidebarMode !== 'outline'" class="item-meta">
                   <span>{{ formatDate(item.createdAt) }}</span>
                   <span v-if="item.views">{{ item.views }} 浏览</span>
                 </div>
               </div>
             </div>
-            <el-dropdown trigger="click" @click.stop>
+            
+            <!-- 大纲模式不显示操作菜单 -->
+            <el-dropdown v-if="sidebarMode !== 'outline'" trigger="click" @click.stop>
               <span class="item-more">
                 <el-icon><MoreFilled /></el-icon>
               </span>
@@ -161,11 +179,11 @@
             </div>
             
             <!-- 如果noteContent为空，显示警告 -->
-            <div v-else-if="!isEditing && (!noteContent || noteContent.length === 0)" style="background: #fff3cd; padding: 15px; border-radius: 4px; border: 1px solid #ffeaa7; color: #856404;">
-              <p><strong>⚠️ 内容为空警告</strong></p>
-              <p>原始内容: {{ noteRaw || '无内容' }}</p>
-              <p>请检查控制台日志获取更多信息</p>
-            </div>
+            <!-- <div v-else-if="!isEditing && (!noteContent || noteContent.length === 0)" style="background: #fff3cd; padding: 15px; border-radius: 4px; border: 1px solid #ffeaa7; color: #856404;"> -->
+              <!-- <p><strong>暂无内容</strong></p> -->
+              <!-- <p>原始内容: {{ noteRaw || '无内容' }}</p> -->
+              <!-- <p>请检查控制台日志获取更多信息</p> -->
+            <!-- </div> -->
             
             <!-- 编辑模式 -->
             <div v-else-if="isEditing" class="edit-mode">
@@ -372,7 +390,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { marked } from 'marked'
@@ -382,6 +400,7 @@ import MindMapEditor from '@/components/MindMapEditorNew.vue'
 import {
   ArrowLeft,
   ArrowRight,
+  ArrowDown,
   Search,
   Document,
   Connection,
@@ -426,6 +445,8 @@ const mindmapData = ref(null)
 const noteRaw = ref('')
 const sidebarMode = ref('list')
 const outline = ref([])
+const activeOutlineId = ref(null)
+const collapsedOutlineIds = ref(new Set())
 const isEditing = ref(false)
 const editingContent = ref('')
 const activeTab = ref('edit')
@@ -481,8 +502,12 @@ const editorTab = ref('edit')
 // Computed
 const filteredItems = computed(() => {
   if (sidebarMode.value === 'outline') {
-    if (!searchKeyword.value) return outline.value
-    return outline.value.filter(h => h.text.toLowerCase().includes(searchKeyword.value.toLowerCase()))
+    const items = searchKeyword.value 
+      ? outline.value.filter(h => h.text.toLowerCase().includes(searchKeyword.value.toLowerCase()))
+      : outline.value
+    
+    // Filter out collapsed children
+    return filterCollapsedOutline(items)
   }
   const base = [...items.value].sort((a,b)=> (a.title||'').localeCompare(b.title||''))
   if (!searchKeyword.value) return base
@@ -491,6 +516,32 @@ const filteredItems = computed(() => {
     (item.description && item.description.toLowerCase().includes(searchKeyword.value.toLowerCase()))
   )
 })
+
+// Filter outline to hide collapsed children
+const filterCollapsedOutline = (items) => {
+  const result = []
+  let skipUntilLevel = null
+  
+  for (const item of items) {
+    // If we're skipping, check if we've reached a level <= the collapsed level
+    if (skipUntilLevel !== null) {
+      if (item.level <= skipUntilLevel) {
+        skipUntilLevel = null
+      } else {
+        continue
+      }
+    }
+    
+    result.push(item)
+    
+    // If this item is collapsed, skip its children
+    if (collapsedOutlineIds.value.has(item.id)) {
+      skipUntilLevel = item.level
+    }
+  }
+  
+  return result
+}
 
 const previewContent = computed(() => {
   return marked(newNoteForm.value.content || '')
@@ -537,7 +588,20 @@ const loadCategory = async () => {
 const selectItem = async (item) => {
   if (sidebarMode.value === 'outline') {
     const el = document.getElementById(item.id)
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    
+    if (el) {
+      // Use scrollIntoView with offset
+      // First, scroll the element into view
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      
+      // Then adjust for header offset
+      setTimeout(() => {
+        const scrollableParent = el.closest('.content-body, .main-content, .content-display-area')
+        if (scrollableParent && scrollableParent.scrollTop > 80) {
+          scrollableParent.scrollTop -= 80
+        }
+      }, 100)
+    }
     return
   }
   // 退出编辑模式
@@ -650,25 +714,100 @@ const loadNoteContent = async (note) => {
 }
 
 function buildOutline(text){
-  const lines = text.split('\n')
-  const result = []
-  let index = 0
-  for (const line of lines){
-    const m = /^(#{1,6})\s+(.*)$/.exec(line)
-    if (m){
-      const level = m[1].length
-      const title = m[2].trim()
-      const id = `md-h-${index++}`
-      result.push({ id, level, text: title })
-    }
-  }
-  outline.value = result
+  outline.value = []
+  
   setTimeout(()=>{
     const container = document.querySelector('.readonly-content')
     if (!container) return
+    
+    const headings = container.querySelectorAll('h1,h2,h3,h4,h5,h6')
+    const result = []
     let i = 0
-    container.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(h=>{ h.id = `md-h-${i++}` })
-  }, 0)
+    
+    headings.forEach(h => {
+      const id = `md-h-${i}`
+      h.id = id
+      
+      // 获取标题级别
+      const tagName = h.tagName.toLowerCase()
+      const level = parseInt(tagName.substring(1))
+      
+      // 获取标题文本
+      const text = h.textContent.trim()
+      
+      result.push({ id, level, text })
+      i++
+    })
+    
+    outline.value = result
+    
+    // Setup scroll listener for outline highlighting
+    setupOutlineScrollListener()
+  }, 100)
+}
+
+// Setup scroll listener to highlight active outline item
+const setupOutlineScrollListener = () => {
+  const container = document.querySelector('.content-body') || 
+                   document.querySelector('.main-content')
+  if (!container) return
+  
+  // Remove existing listener if any
+  container.removeEventListener('scroll', handleOutlineScroll)
+  container.addEventListener('scroll', handleOutlineScroll)
+}
+
+// Handle scroll to update active outline item
+const handleOutlineScroll = () => {
+  if (sidebarMode.value !== 'outline' || outline.value.length === 0) return
+  
+  const container = document.querySelector('.content-body') || 
+                   document.querySelector('.main-content')
+  if (!container) return
+  
+  const scrollTop = container.scrollTop
+  const containerTop = container.getBoundingClientRect().top
+  
+  // Find the currently visible heading
+  let activeId = null
+  let minDistance = Infinity
+  
+  for (const item of outline.value) {
+    const element = document.getElementById(item.id)
+    if (!element) continue
+    
+    const rect = element.getBoundingClientRect()
+    const distance = Math.abs(rect.top - containerTop - 100) // 100px offset from top
+    
+    if (rect.top <= containerTop + 150 && distance < minDistance) {
+      minDistance = distance
+      activeId = item.id
+    }
+  }
+  
+  activeOutlineId.value = activeId
+}
+
+// Check if outline item has children
+const hasChildren = (item) => {
+  // Find the item's index in the original outline array
+  const itemIndex = outline.value.findIndex(i => i.id === item.id)
+  if (itemIndex === -1 || itemIndex >= outline.value.length - 1) return false
+  
+  const nextItem = outline.value[itemIndex + 1]
+  return nextItem && nextItem.level > item.level
+}
+
+// Toggle outline item collapse
+const toggleOutlineCollapse = (item, event) => {
+  event.stopPropagation()
+  const newSet = new Set(collapsedOutlineIds.value)
+  if (newSet.has(item.id)) {
+    newSet.delete(item.id)
+  } else {
+    newSet.add(item.id)
+  }
+  collapsedOutlineIds.value = newSet
 }
 
 const loadMindmapData = async (mindmap) => {
@@ -1174,6 +1313,15 @@ onMounted(() => {
   loadItems()
 })
 
+onBeforeUnmount(() => {
+  // Cleanup scroll listener
+  const container = document.querySelector('.content-body') || 
+                   document.querySelector('.main-content')
+  if (container) {
+    container.removeEventListener('scroll', handleOutlineScroll)
+  }
+})
+
 // Watch for route changes
 watch(() => [props.contentType, props.categoryId], () => {
   // 当 categoryId 改变时，更新表单中的 categoryId
@@ -1277,6 +1425,86 @@ watch(() => [props.contentType, props.categoryId], () => {
   background: #e6f7ff;
   border-color: #91d5ff;
   color: #1890ff;
+}
+
+/* 大纲项样式 */
+.outline-item {
+  display: flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+  margin-bottom: 2px;
+}
+
+.outline-item:hover {
+  background: #f5f7fa;
+}
+
+.outline-item.active {
+  background: #e7f1f7;
+  border-left: 3px solid #1890ff;
+  padding-left: 5px;
+}
+
+.outline-indent {
+  flex-shrink: 0;
+}
+
+.outline-toggle-icon {
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 4px;
+  flex-shrink: 0;
+  border-radius: 3px;
+  transition: background 0.2s;
+}
+
+.outline-toggle-icon:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.collapse-icon {
+  transition: transform 0.2s;
+}
+
+.no-children-spacer {
+  display: inline-block;
+  width: 14px;
+}
+
+.outline-item .item-title {
+  font-size: 13px;
+  font-weight: 400;
+  margin-bottom: 0;
+  line-height: 1.4;
+}
+
+/* 折叠状态下的大纲项 */
+.sidebar.collapsed .outline-item {
+  padding: 8px 4px;
+  justify-content: center;
+}
+
+.sidebar.collapsed .outline-indent {
+  display: none;
+}
+
+.sidebar.collapsed .outline-toggle-icon {
+  margin-right: 0;
+}
+
+.sidebar.collapsed .outline-item .item-info {
+  display: none;
+}
+
+.sidebar.collapsed .outline-item.active {
+  border-left: none;
+  padding-left: 4px;
 }
 
 .item-main {
