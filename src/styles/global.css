@@ -1,0 +1,17 @@
+:root{--el-color-primary:#ecf5ff;--el-color-primary-light-3:#f2f7ff;--el-color-primary-light-5:#f6f8fa;--el-color-primary-light-7:#d3e3fd}
+body{margin:0;background:#ffffff;color:#333}
+.bg-secondary{background:#f6f8fa}
+.bg-accent{background:#d3e3fd}
+.btn-white{background:#ffffff !important;color:#333 !important;border:1px solid #eaecef !important}
+.el-button{color:#333 !important}
+.el-button:focus,.el-button:hover,.el-button:active{color:#333 !important}
+.el-button.is-plain,.el-button.is-link,.el-button.is-text{color:#333 !important}
+.el-button--primary,.el-button--success,.el-button--warning,.el-button--danger{color:#333 !important}
+.el-button.is-disabled{color:#333 !important;opacity:.6}
+/* menu text keep black; only background changes */
+.el-menu-item{color:#333 !important}
+.el-menu-item.is-active{color:#333 !important;background:#ecf5ff !important}
+.el-menu-item:hover{color:#333 !important;background:#f6f8fa !important}
+.el-sub-menu__title{color:#333 !important}
+.el-sub-menu__title.is-active{color:#333 !important;background:#ecf5ff !important}
+.el-sub-menu__title:hover{color:#333 !important;background:#f6f8fa !important}

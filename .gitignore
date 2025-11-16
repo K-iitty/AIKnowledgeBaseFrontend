@@ -1,0 +1,27 @@
+node_modules
+# Dependencies
+node_modules/
+
+# Production builds
+/dist
+
+# Logs
+logs
+*.log
+
+# Environment files
+.env
+.env.local
+.env.production.local
+
+# IDE and editor files
+.vscode/
+.idea/
+
+# System files
+.DS_Store
+Thumbs.db
+
+# Vite related
+*.hot-update.*
+!.gitkeep

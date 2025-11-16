@@ -1,0 +1,1949 @@
+<template>
+  <div class="knowledge-content-layout">
+    <!-- Sidebar -->
+    <div class="sidebar" :class="{ collapsed: sidebarCollapsed }">
+      <div class="sidebar-header">
+        <h3>{{ currentCategory?.name || '知识库' }}</h3>
+        <el-button 
+          link 
+          @click="sidebarCollapsed = !sidebarCollapsed"
+          class="collapse-btn"
+        >
+          <el-icon>
+            <ArrowLeft v-if="!sidebarCollapsed" />
+            <ArrowRight v-else />
+          </el-icon>
+        </el-button>
+      </div>
+
+      <div class="sidebar-content">
+        <!-- Search -->
+        <div class="search-box">
+          <el-input
+            v-model="searchKeyword"
+            placeholder="搜索内容..."
+            size="small"
+            clearable
+          >
+            <template #prefix>
+              <el-icon><Search /></el-icon>
+            </template>
+          </el-input>
+        </div>
+        
+        <!-- 大纲切换按钮 -->
+        <div class="outline-toggle" v-if="props.contentType==='notes' && items.length > 0">
+          <el-button 
+            @click="sidebarMode = sidebarMode==='list' ? 'outline' : 'list'" 
+            size="small" 
+            circle
+            :title="sidebarMode==='list' ? '查看大纲' : '返回列表'"
+          >
+            <el-icon><List /></el-icon>
+          </el-button>
+        </div>
+
+        <!-- Content List -->
+        <div class="content-list">
+          <div 
+            v-for="item in filteredItems" 
+            :key="item.id"
+            class="content-item"
+            :class="{ active: selectedItem?.id === item.id }"
+          >
+            <div class="item-main" @click="selectItem(item)">
+              <div class="item-icon" :style="{ marginLeft: item.level ? (item.level-1)*8 + 'px' : '0px' }">
+                <el-icon size="16">
+                  <Document v-if="item.type === 'note'" />
+                  <Connection v-else />
+                </el-icon>
+              </div>
+              <div class="item-info">
+                <div class="item-title">{{ item.title || item.text }}</div>
+                <div class="item-meta">
+                  <span>{{ formatDate(item.createdAt) }}</span>
+                  <span v-if="item.views">{{ item.views }} 浏览</span>
+                </div>
+              </div>
+            </div>
+            <el-dropdown trigger="click" @click.stop>
+              <span class="item-more">
+                <el-icon><MoreFilled /></el-icon>
+              </span>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item @click="editItemFromDropdown(item)">
+                    <el-icon><Edit /></el-icon>
+                    编辑
+                  </el-dropdown-item>
+                  <el-dropdown-item @click="downloadItemFromDropdown(item)">
+                    <el-icon><Download /></el-icon>
+                    下载
+                  </el-dropdown-item>
+                  <el-dropdown-item @click="deleteItemFromDropdown(item)" divided>
+                    <el-icon><Delete /></el-icon>
+                    <span style="color: #f56c6c;">删除</span>
+                  </el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+          </div>
+        </div>
+
+        <!-- Empty State -->
+        <div v-if="filteredItems.length === 0 && sidebarMode === 'list'" class="empty-state">
+          <el-empty description="暂无内容" :image-size="60" />
+        </div>
+        <div v-if="sidebarMode === 'outline' && outline.length === 0" class="empty-state">
+          <el-empty description="暂无大纲" :image-size="60" />
+        </div>
+      </div>
+
+      <!-- Add New Button -->
+      <div class="sidebar-footer">
+        <el-button 
+          type="primary" 
+          size="small" 
+          @click="props.contentType === 'notes' ? createNewNote() : createNewMindmap()"
+          class="add-btn"
+        >
+          <el-icon><Plus /></el-icon>
+          新建{{ props.contentType === 'notes' ? '笔记' : '思维导图' }}
+        </el-button>
+        <!-- 导入按钮 -->
+        <el-upload
+          v-if="(props.contentType==='notes' || props.contentType==='mindmaps') && !isCreating"
+          :action="props.contentType==='notes' ? '/api/notes/import' : '/api/mindmaps/import'"
+          :headers="{ Authorization: 'Bearer ' + (typeof localStorage !== 'undefined' ? (localStorage.getItem('token')||'') : '') }"
+          :data="{ categoryId: props.categoryId, visibility: 'private' }"
+          :show-file-list="false"
+          :accept="props.contentType==='notes' ? '.md,text/markdown' : '.xmind,.mmap,application/vnd.xmind.workbook'"
+          @success="loadItems"
+          class="import-upload"
+        >
+          <el-button size="small" class="import-btn">
+            <el-icon><Upload /></el-icon>
+            导入
+          </el-button>
+        </el-upload>
+      </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content" :class="{ expanded: sidebarCollapsed }">
+      <div v-if="(selectedItem || isCreating || (items && items.length > 0)) && !loading" class="content-display">
+        <!-- Content Title Bar (Simplified) -->
+        <div class="content-title-bar" v-if="!isCreating && selectedItem">
+          <!-- <h1>{{ selectedItem?.title || '未知标题' }}</h1> -->
+        </div>
+        <div class="content-title-bar" v-else-if="isCreating">
+          <h1>新建{{ props.contentType === 'notes' ? '笔记' : '思维导图' }}</h1>
+          <div class="create-actions">
+            <el-button type="success" @click="props.contentType === 'notes' ? saveNewNote() : saveNewMindmap()" size="small">保存</el-button>
+            <el-button @click="cancelCreate" size="small">取消</el-button>
+          </div>
+        </div>
+
+        <!-- Content Body -->
+        <div class="content-body">
+          <!-- 显示已存在笔记的内容 -->
+          <div v-if="!isCreating && selectedItem && props.contentType === 'notes'" class="note-content">
+            <div class="readonly-toolbar" v-if="!isEditing">
+              <el-button type="primary" size="small" @click="startEditing">
+                <el-icon><Edit /></el-icon>
+                编辑
+              </el-button>
+            </div>
+            
+            <!-- 内容显示区域 -->
+            <div v-if="!isEditing && noteContent" class="content-display-area">
+              <div class="readonly-content" v-html="noteContent"></div>
+            </div>
+            
+            <!-- 如果noteContent为空，显示警告 -->
+            <div v-else-if="!isEditing && (!noteContent || noteContent.length === 0)" style="background: #fff3cd; padding: 15px; border-radius: 4px; border: 1px solid #ffeaa7; color: #856404;">
+              <p><strong>⚠️ 内容为空警告</strong></p>
+              <p>原始内容: {{ noteRaw || '无内容' }}</p>
+              <p>请检查控制台日志获取更多信息</p>
+            </div>
+            
+            <!-- 编辑模式 -->
+            <div v-else-if="isEditing" class="edit-mode">
+              <div class="editor-container">
+                <div class="editor-toolbar">
+                  <el-tabs v-model="activeTab" class="editor-tabs">
+                    <el-tab-pane label="编辑" name="edit"></el-tab-pane>
+                    <el-tab-pane label="预览" name="preview"></el-tab-pane>
+                  </el-tabs>
+                </div>
+                
+                <div class="editor-content">
+                  <div v-show="activeTab === 'edit'" class="editor-pane">
+                    <el-input
+                      v-model="editingContent"
+                      type="textarea"
+                      :rows="20"
+                      placeholder="请输入 Markdown 内容，支持图片上传"
+                      class="editor-textarea"
+                    />
+                  </div>
+                  
+                  <div v-show="activeTab === 'preview'" class="preview-pane">
+                    <div class="preview-content" v-html="marked(editingContent || '')"></div>
+                  </div>
+                </div>
+                
+                <div class="editor-actions">
+                  <el-button type="success" size="small" @click="saveContent">保存</el-button>
+                  <el-button size="small" @click="cancelEdit">取消</el-button>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 显示思维导图内容 -->
+          <div v-else-if="!isCreating && selectedItem && props.contentType === 'mindmaps'" class="mindmap-content">
+            <MindMapEditor 
+              :mindmap="selectedItem" 
+              @save="saveMindmap"
+              @download="downloadItem"
+              style="height: 100%;"
+            />
+          </div>
+          
+          <!-- 创建新笔记的编辑器 -->
+          <div v-else-if="isCreating && props.contentType === 'notes'" class="note-editor-container">
+            <div class="create-note-header">
+              <el-form :model="newNoteForm" label-width="80px">
+                <el-form-item label="标题" required>
+                  <el-input v-model="newNoteForm.title" placeholder="请输入笔记标题" />
+                </el-form-item>
+                <el-form-item label="描述">
+                  <el-input v-model="newNoteForm.description" type="textarea" :rows="2" placeholder="请输入笔记描述" />
+                </el-form-item>
+                <el-form-item label="可见性">
+                  <el-radio-group v-model="newNoteForm.visibility">
+                    <el-radio label="private">私有</el-radio>
+                    <el-radio label="public">公开</el-radio>
+                  </el-radio-group>
+                </el-form-item>
+              </el-form>
+            </div>
+            
+            <div class="editor-container">
+              <div class="editor-toolbar">
+                <el-tabs v-model="activeTab" class="editor-tabs">
+                  <el-tab-pane label="编辑" name="edit"></el-tab-pane>
+                  <el-tab-pane label="预览" name="preview"></el-tab-pane>
+                </el-tabs>
+              </div>
+          
+              <div class="editor-content">
+                <div v-show="activeTab === 'edit'" class="editor-pane">
+                  <el-input
+                    v-model="newNoteForm.content"
+                    type="textarea"
+                    :rows="15"
+                    placeholder="请输入 Markdown 内容，支持图片上传"
+                    class="editor-textarea"
+                  />
+                  <div class="image-upload-area">
+                    <el-upload
+                      :auto-upload="false"
+                      :on-change="onImageChange"
+                      :show-file-list="false"
+                      accept="image/*"
+                      class="image-upload"
+                    >
+                      <el-button size="small" type="primary">
+                        <el-icon><Plus /></el-icon>
+                        上传图片
+                      </el-button>
+                    </el-upload>
+                    <div class="upload-tip">
+                      图片将自动上传到云端，插入到内容中
+                    </div>
+                  </div>
+                </div>
+            
+                <div v-show="activeTab === 'preview'" class="preview-pane">
+                  <div class="preview-content" v-html="previewContent"></div>
+                </div>
+              </div>
+              
+              <!-- 添加保存和取消按钮到编辑器底部 -->
+              <div class="editor-actions" style="text-align: center; padding: 20px 0;">
+                <el-button type="success" size="small" @click="saveNewNote">保存</el-button>
+                <el-button size="small" @click="cancelCreate">取消</el-button>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 创建新思维导图的表单 -->
+          <div v-else-if="isCreating && props.contentType === 'mindmaps'" class="mindmap-create-form">
+            <div class="create-form-container">
+              <h2 class="form-title">创建新思维导图</h2>
+              <el-form :model="newMindmapForm" label-width="100px" class="mindmap-form">
+                <el-form-item label="标题" required>
+                  <el-input 
+                    v-model="newMindmapForm.title" 
+                    placeholder="请输入思维导图标题（将作为根节点）" 
+                    maxlength="50"
+                    show-word-limit
+                  />
+                </el-form-item>
+                <el-form-item label="描述">
+                  <el-input 
+                    v-model="newMindmapForm.description" 
+                    type="textarea" 
+                    :rows="4" 
+                    placeholder="请输入思维导图描述（可选）"
+                    maxlength="200"
+                    show-word-limit
+                  />
+                </el-form-item>
+                <el-form-item label="可见性">
+                  <el-radio-group v-model="newMindmapForm.visibility">
+                    <el-radio label="private">私有</el-radio>
+                    <el-radio label="public">公开</el-radio>
+                  </el-radio-group>
+                </el-form-item>
+                <el-form-item>
+                  <div class="form-actions">
+                    <el-button type="primary" @click="saveNewMindmap" :loading="saving">
+                      创建思维导图
+                    </el-button>
+                    <el-button @click="cancelCreate">取消</el-button>
+                  </div>
+                </el-form-item>
+              </el-form>
+              <div class="form-tip">
+                <el-icon><InfoFilled /></el-icon>
+                <span>创建后将自动生成一个以标题命名的根节点和两个默认子节点，您可以在编辑页面中继续完善思维导图内容。</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      <!-- Empty State -->
+      <div v-else class="empty-content">
+        <el-empty description="请选择要查看的内容" />
+      </div>
+    </div>
+
+    <!-- Add/Edit Dialog -->
+    <el-dialog
+      v-model="showAddDialog"
+      :title="editingItem ? '编辑内容' : '新建内容'"
+      width="600px"
+      @close="resetForm"
+    >
+      <el-form :model="itemForm" label-width="80px">
+        <el-form-item label="标题" prop="title" required>
+          <el-input v-model="itemForm.title" placeholder="请输入标题" />
+        </el-form-item>
+        <el-form-item label="描述" prop="description">
+          <el-input 
+            v-model="itemForm.description" 
+            type="textarea" 
+            placeholder="添加描述"
+            :rows="3"
+          />
+        </el-form-item>
+        <el-form-item label="标签" prop="tags">
+          <el-input v-model="itemForm.tags" placeholder="用逗号分隔标签" />
+        </el-form-item>
+        <el-form-item label="可见性" prop="visibility">
+          <el-radio-group v-model="itemForm.visibility">
+            <el-radio label="private">私有</el-radio>
+            <el-radio label="public">公开</el-radio>
+          </el-radio-group>
+        </el-form-item>
+        <!-- 隐藏字段用于传递 categoryId -->
+        <input type="hidden" v-model="itemForm.categoryId" />
+      </el-form>
+      <template #footer>
+        <el-button @click="showAddDialog = false">取消</el-button>
+        <el-button type="primary" @click="saveNewItem">保存</el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed, onMounted, watch, nextTick } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { marked } from 'marked'
+import http from '@/api/http'
+import MindMapEditor from '@/components/MindMapEditorNew.vue'
+// import MindMapEditor from '@/components/MindMapEditor.vue'
+import {
+  ArrowLeft,
+  ArrowRight,
+  Search,
+  Document,
+  Connection,
+  Calendar,
+  View,
+  Star,
+  Plus,
+  Edit,
+  Download,
+  Delete,
+  Upload,
+  List,
+  InfoFilled,
+  MoreFilled
+} from '@element-plus/icons-vue'
+
+const route = useRoute()
+const router = useRouter()
+
+// Props
+const props = defineProps({
+  contentType: {
+    type: String,
+    required: true, // 'notes' or 'mindmaps'
+  },
+  categoryId: {
+    type: [String, Number],
+    required: true
+  }
+})
+
+// State
+const sidebarCollapsed = ref(false)
+const searchKeyword = ref('')
+const items = ref([])
+const selectedItem = ref(null)
+const currentCategory = ref(null)
+const showAddDialog = ref(false)
+const editingItem = ref(null)
+const noteContent = ref('')
+const mindmapData = ref(null)
+const noteRaw = ref('')
+const sidebarMode = ref('list')
+const outline = ref([])
+const isEditing = ref(false)
+const editingContent = ref('')
+const activeTab = ref('edit')
+const isCreating = ref(false) // 新增状态，标识是否在创建笔记
+const loading = ref(false) // 添加加载状态
+
+// Form
+const itemForm = ref({
+  title: '',
+  description: '',
+  content: '',
+  tags: '',
+  visibility: 'private',
+  categoryId: props.categoryId // 默认设置为当前分类ID
+})
+
+// 新增笔记表单
+const newNoteForm = ref({
+  title: '',
+  description: '',
+  content: '',
+  tags: '',
+  visibility: 'private',
+  coverKey: '',
+  categoryId: props.categoryId
+})
+
+// 新增思维导图表单
+const newMindmapForm = ref({
+  title: '',
+  description: '',
+  visibility: 'private',
+  categoryId: props.categoryId
+})
+
+// 新增思维导图数据
+const newMindmapData = ref({
+  title: '',
+  description: '',
+  content: null
+})
+
+// 临时思维导图对象，用于新建思维导图
+const tempMindmap = ref({
+  id: null,
+  title: '',
+  description: '',
+  content: null
+})
+
+const editorTab = ref('edit')
+
+// Computed
+const filteredItems = computed(() => {
+  if (sidebarMode.value === 'outline') {
+    if (!searchKeyword.value) return outline.value
+    return outline.value.filter(h => h.text.toLowerCase().includes(searchKeyword.value.toLowerCase()))
+  }
+  const base = [...items.value].sort((a,b)=> (a.title||'').localeCompare(b.title||''))
+  if (!searchKeyword.value) return base
+  return base.filter(item => 
+    (item.title||'').toLowerCase().includes(searchKeyword.value.toLowerCase()) ||
+    (item.description && item.description.toLowerCase().includes(searchKeyword.value.toLowerCase()))
+  )
+})
+
+const previewContent = computed(() => {
+  return marked(newNoteForm.value.content || '')
+})
+
+// Methods
+const loadItems = async () => {
+  try {
+    loading.value = true
+    const endpoint = props.contentType === 'notes' ? '/notes/list' : '/mindmaps/list'
+    const { data } = await http.get(endpoint, {
+      params: { categoryId: props.categoryId }
+    })
+    const typed = Array.isArray(data) ? data.map(d => ({ ...d, type: props.contentType === 'notes' ? 'note' : 'mindmap' })) : []
+    items.value = typed.sort((a,b)=> (a.title||'').localeCompare(b.title||''))
+    // 只有在没有选中项且不是创建模式时才自动选择第一项
+    if (items.value.length > 0 && !selectedItem.value && !isCreating.value) {
+      selectItem(items.value[0])
+    }
+    
+    // 如果当前没有选中项且不是创建模式，但列表不为空，选择第一项
+    if (items.value.length > 0 && !selectedItem.value && !isCreating.value) {
+      selectItem(items.value[0])
+    }
+  } catch (error) {
+    ElMessage.error('加载内容失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+const loadCategory = async () => {
+  try {
+    const endpoint = props.contentType === 'notes' 
+      ? `/categories/notes/${props.categoryId}` 
+      : `/categories/mindmaps/${props.categoryId}`
+    const { data } = await http.get(endpoint)
+    currentCategory.value = data
+  } catch (error) {
+    ElMessage.error('加载分类失败')
+  }
+}
+
+const selectItem = async (item) => {
+  if (sidebarMode.value === 'outline') {
+    const el = document.getElementById(item.id)
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+    return
+  }
+  // 退出编辑模式
+  isEditing.value = false
+  isCreating.value = false // 退出创建模式
+  try {
+    selectedItem.value = item
+    console.log('选中项目:', item)
+    if (props.contentType === 'notes') {
+      console.log('开始加载笔记内容')
+      await loadNoteContent(item)
+      console.log('笔记内容加载完成')
+    } else {
+      await loadMindmapData(item)
+    }
+  } catch (error) {
+    console.error('选择项目时出错:', error)
+  }
+}
+
+const loadNoteContent = async (note) => {
+  try {
+    noteContent.value = ''
+    noteRaw.value = ''
+    console.log('🔍 开始加载笔记内容，笔记ID:', note.id)
+    
+    // 首先尝试从详情接口获取笔记信息
+    try {
+      console.log('📡 调用详情接口:', `/notes/${note.id}`)
+      const detailResponse = await http.get(`/notes/${note.id}`)
+      console.log('📋 笔记详情完整响应:', JSON.stringify(detailResponse, null, 2))
+      console.log('📊 详情数据对象:', detailResponse.data)
+      
+      // 检查content字段是否存在
+      console.log('🔍 content字段存在性检查:')
+      console.log('- detailResponse.data存在:', !!detailResponse.data)
+      console.log('- detailResponse.data.content存在:', !!detailResponse.data?.content)
+      console.log('- content字段值:', detailResponse.data?.content)
+      console.log('- content字段类型:', typeof detailResponse.data?.content)
+      console.log('- content字段长度:', detailResponse.data?.content?.length)
+      
+      // 如果详情接口有content字段，直接使用
+      if (detailResponse.data && detailResponse.data.content !== undefined && detailResponse.data.content !== null) {
+        const text = detailResponse.data.content
+        console.log('✅ 使用详情接口content字段，内容长度:', text.length)
+        console.log('✅ 内容前100字符:', text.substring(0, 100))
+        noteRaw.value = text
+        
+        // 测试marked转换
+        try {
+          const html = marked(text)
+          console.log('📝 marked转换成功，HTML长度:', html.length)
+          console.log('📝 HTML前200字符:', html.substring(0, 200))
+          noteContent.value = html
+        } catch (markError) {
+          console.error('❌ marked转换失败:', markError)
+          noteContent.value = `<pre style="white-space: pre-wrap;">${text}</pre>`
+        }
+        
+        buildOutline(text)
+        note.views = (note.views || 0) + 1
+        console.log('✅ 详情接口加载完成')
+        return
+      } else {
+        console.log('⚠️ 详情接口无content字段，准备调用内容接口')
+      }
+    } catch (detailError) {
+      console.error('❌ 详情接口调用失败:', detailError)
+      console.error('错误详情:', detailError.response?.data || detailError.message)
+    }
+    
+    // 如果详情接口没有内容，再尝试内容接口
+    console.log('📡 准备调用内容接口...')
+    const contentStream = await http.get(`/notes/${note.id}/content`)
+    const text = contentStream.data || ''
+    console.log('📋 内容接口返回，内容长度:', text.length)
+    noteRaw.value = text
+    
+    // 测试marked是否正常工作
+    try {
+      const testHtml = marked('# 测试标题\n\n这是一段测试内容')
+      console.log('🧪 marked测试输出:', testHtml)
+      
+      if (text && text.trim()) {
+        noteContent.value = marked(text)
+        console.log('📝 使用内容接口，转换后HTML长度:', noteContent.value.length)
+      } else {
+        console.log('⚠️ 内容为空，显示默认提示')
+        noteContent.value = '<p style="color: #999; text-align: center; padding: 40px;">📝 这是一个空笔记，点击编辑按钮开始编写内容。</p>'
+      }
+    } catch (markError) {
+      console.error('❌ marked转换失败:', markError)
+      // 如果marked失败，使用简单的文本显示
+      noteContent.value = `<pre style="white-space: pre-wrap;">${text}</pre>`
+    }
+    
+    buildOutline(text)
+    note.views = (note.views || 0) + 1
+  } catch (error) {
+    console.error('❌ 加载笔记内容失败:', error)
+    console.error('错误详情:', error.response?.data || error.message)
+    ElMessage.error('加载笔记内容失败')
+    // 出错时显示错误信息
+    noteContent.value = '<p style="color: red;">❌ 内容加载失败，请稍后重试</p>'
+  }
+  
+  console.log('🏁 loadNoteContent函数执行完成')
+  console.log('最终noteContent值:', noteContent.value)
+  console.log('最终noteContent长度:', noteContent.value?.length || 0)
+}
+
+function buildOutline(text){
+  const lines = text.split('\n')
+  const result = []
+  let index = 0
+  for (const line of lines){
+    const m = /^(#{1,6})\s+(.*)$/.exec(line)
+    if (m){
+      const level = m[1].length
+      const title = m[2].trim()
+      const id = `md-h-${index++}`
+      result.push({ id, level, text: title })
+    }
+  }
+  outline.value = result
+  setTimeout(()=>{
+    const container = document.querySelector('.readonly-content')
+    if (!container) return
+    let i = 0
+    container.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(h=>{ h.id = `md-h-${i++}` })
+  }, 0)
+}
+
+const loadMindmapData = async (mindmap) => {
+  try {
+    mindmapData.value = null
+    // For mindmaps, we might want to show a preview or just metadata
+    // The actual file would be downloaded
+    mindmapData.value = {
+      title: mindmap.title,
+      description: mindmap.description,
+      format: mindmap.format,
+      nodeCount: mindmap.nodeCount
+    }
+    
+    // Update view count
+    mindmap.views = (mindmap.views || 0) + 1
+  } catch (error) {
+    ElMessage.error('加载思维导图数据失败')
+  }
+}
+
+const formatDate = (dateString) => {
+  if (!dateString) return ''
+  const date = new Date(dateString)
+  return date.toLocaleDateString('zh-CN')
+}
+
+const editItem = () => {
+  if (!selectedItem.value) return
+  
+  editingItem.value = selectedItem.value
+  itemForm.value = {
+    title: selectedItem.value.title,
+    description: selectedItem.value.description || '',
+    content: noteRaw.value || '',
+    tags: selectedItem.value.tags || '',
+    visibility: selectedItem.value.visibility || 'private',
+    categoryId: props.categoryId // 确保分类ID正确
+  }
+  editorTab.value = 'edit'
+  showAddDialog.value = true
+}
+
+const startEditing = () => {
+  isEditing.value = true
+  activeTab.value = 'edit'
+  editingContent.value = noteRaw.value || ''
+}
+
+const refreshContent = () => {
+  console.log('🔄 手动刷新内容...')
+  if (selectedItem.value) {
+    loadNoteContent(selectedItem.value)
+  } else {
+    console.log('⚠️ 没有选中的项目')
+  }
+}
+
+const saveContent = async () => {
+  try {
+    const data = {
+      title: selectedItem.value.title,
+      description: selectedItem.value.description,
+      content: editingContent.value,
+      tags: selectedItem.value.tags,
+      coverKey: selectedItem.value.coverKey,
+      visibility: selectedItem.value.visibility
+    }
+    
+    await http.put(`/notes/${selectedItem.value.id}`, data)
+    ElMessage.success('保存成功')
+    
+    // 更新显示内容
+    noteRaw.value = editingContent.value
+    noteContent.value = marked(editingContent.value)
+    
+    // 退出编辑模式
+    isEditing.value = false
+    
+    // 重新加载列表以更新信息
+    await loadItems()
+  } catch (error) {
+    ElMessage.error('保存失败')
+  }
+}
+
+const cancelEdit = () => {
+  isEditing.value = false
+  editingContent.value = ''
+}
+
+const downloadItem = async () => {
+  if (!selectedItem.value) return
+  
+  try {
+    const endpoint = props.contentType === 'notes' 
+      ? `/notes/${selectedItem.value.id}/download` 
+      : `/mindmaps/${selectedItem.value.id}/download`
+    
+    const response = await http.get(endpoint, { responseType: 'blob' })
+    
+    // Create download link
+    const url = window.URL.createObjectURL(new Blob([response.data]))
+    const link = document.createElement('a')
+    const fileExtension = selectedItem.value.format || (props.contentType === 'notes' ? 'md' : 'xmind')
+    link.href = url
+    link.setAttribute('download', `${selectedItem.value.title}.${fileExtension}`)
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    window.URL.revokeObjectURL(url)
+    
+    ElMessage.success('下载成功')
+  } catch (error) {
+    ElMessage.error('下载失败: ' + (error.message || '未知错误'))
+  }
+}
+
+const deleteItem = async () => {
+  if (!selectedItem.value) return
+  
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除"${selectedItem.value.title}"吗？`,
+      '确认删除',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    
+    const endpoint = props.contentType === 'notes' 
+      ? `/notes/${selectedItem.value.id}` 
+      : `/mindmaps/${selectedItem.value.id}`
+    
+    await http.delete(endpoint)
+    ElMessage.success('删除成功')
+    
+    // Reload items and select next available
+    await loadItems()
+    if (items.value.length > 0) {
+      selectItem(items.value[0])
+    } else {
+      selectedItem.value = null
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除失败')
+    }
+  }
+}
+
+// 从下拉菜单编辑项目
+const editItemFromDropdown = (item) => {
+  selectItem(item)
+  setTimeout(() => {
+    editItem()
+  }, 100)
+}
+
+// 从下拉菜单下载项目
+const downloadItemFromDropdown = async (item) => {
+  const previousItem = selectedItem.value
+  selectedItem.value = item
+  await downloadItem()
+  selectedItem.value = previousItem
+}
+
+// 从下拉菜单删除项目
+const deleteItemFromDropdown = async (item) => {
+  try {
+    await ElMessageBox.confirm(
+      `确定要删除"${item.title}"吗？`,
+      '确认删除',
+      {
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        type: 'warning'
+      }
+    )
+    
+    const endpoint = props.contentType === 'notes' 
+      ? `/notes/${item.id}` 
+      : `/mindmaps/${item.id}`
+    
+    await http.delete(endpoint)
+    ElMessage.success('删除成功')
+    
+    // 如果删除的是当前选中项，清除选中
+    if (selectedItem.value?.id === item.id) {
+      selectedItem.value = null
+    }
+    
+    // Reload items and select next available
+    await loadItems()
+    if (items.value.length > 0 && !selectedItem.value) {
+      selectItem(items.value[0])
+    }
+  } catch (error) {
+    if (error !== 'cancel') {
+      ElMessage.error('删除失败')
+    }
+  }
+}
+
+const saveItem = async () => {
+  try {
+    const endpoint = props.contentType === 'notes' ? '/notes' : '/mindmaps'
+    // 确保 categoryId 被正确设置
+    const data = {
+      ...itemForm.value,
+      categoryId: itemForm.value.categoryId || props.categoryId
+    }
+    
+    if (editingItem.value) {
+      await http.put(`${endpoint}/${editingItem.value.id}`, data)
+      ElMessage.success('更新成功')
+      showAddDialog.value = false
+      resetForm()
+      loadItems()
+    } else {
+      // 创建新项目
+      const response = await http.post(endpoint, data)
+      ElMessage.success('创建成功')
+      showAddDialog.value = false
+      resetForm()
+      
+      // 重新加载列表
+      await loadItems()
+      
+      // 对于笔记，创建后直接在当前页面显示
+      if (props.contentType === 'notes') {
+        // 选中新创建的笔记
+        const createdItem = items.value.find(item => item.id === response.data.id)
+        if (createdItem) {
+          selectItem(createdItem)
+        }
+      }
+    }
+  } catch (error) {
+    ElMessage.error('保存失败: ' + error.message)
+  }
+}
+
+const resetForm = () => {
+  editingItem.value = null
+  itemForm.value = {
+    title: '',
+    description: '',
+    content: '',
+    tags: '',
+    visibility: 'private',
+    categoryId: props.categoryId // 重置为当前分类ID
+  }
+}
+
+// 新增方法用于显示添加对话框
+const showAddItem = () => {
+  // 使用弹窗方式创建新笔记
+  resetForm()
+  itemForm.value.categoryId = props.categoryId
+  showAddDialog.value = true
+}
+
+// 直接创建新笔记的方法
+const createNewNote = () => {
+  // 进入创建模式
+  isCreating.value = true
+  isEditing.value = false // 确保退出编辑模式
+  
+  // 使用 nextTick 确保 DOM 更新后再设置 selectedItem
+  nextTick(() => {
+    try {
+      selectedItem.value = null // 清除选中项
+    } catch (e) {
+      console.error('设置selectedItem时出错:', e)
+      selectedItem.value = null
+    }
+  })
+  
+  activeTab.value = 'edit'
+  newNoteForm.value = {
+    title: '',
+    description: '',
+    content: '',
+    tags: '',
+    visibility: 'private',
+    coverKey: '',
+    categoryId: props.categoryId
+  }
+}
+
+// 直接创建新思维导图的方法
+const createNewMindmap = () => {
+  // 进入创建模式
+  isCreating.value = true
+  isEditing.value = false // 确保退出编辑模式
+  
+  // 使用 nextTick 确保 DOM 更新后再设置 selectedItem
+  nextTick(() => {
+    try {
+      selectedItem.value = null // 清除选中项
+    } catch (e) {
+      console.error('设置selectedItem时出错:', e)
+      selectedItem.value = null
+    }
+  })
+  
+  newMindmapForm.value = {
+    title: '',
+    description: '',
+    visibility: 'private',
+    categoryId: props.categoryId
+  }
+  
+  // 初始化临时思维导图对象
+  tempMindmap.value = {
+    id: null,
+    title: '',
+    description: '',
+    content: null
+  }
+}
+
+// 保存新建笔记的方法
+const saveNewNote = async () => {
+  if (!newNoteForm.value.title || !newNoteForm.value.title.trim()) {
+    ElMessage.warning('请输入笔记标题')
+    return
+  }
+  
+  try {
+    // 创建新笔记
+    const data = {
+      title: newNoteForm.value.title,
+      description: newNoteForm.value.description,
+      content: newNoteForm.value.content,
+      visibility: newNoteForm.value.visibility,
+      categoryId: props.categoryId,
+      coverKey: newNoteForm.value.coverKey
+    }
+    
+    const response = await http.post('/notes', data)
+    ElMessage.success('笔记创建成功')
+    
+    // 退出创建模式
+    isCreating.value = false
+    
+    // 重新加载列表
+    await loadItems()
+    
+    // 选中新创建的笔记
+    const createdItem = items.value.find(item => item.id === response.data.id)
+    if (createdItem) {
+      selectItem(createdItem)
+    } else if (items.value.length > 0) {
+      selectItem(items.value[0])
+    }
+  } catch (error) {
+    ElMessage.error('保存失败: ' + (error.message || '未知错误'))
+  }
+}
+
+// 保存新建的思维导图
+const saveNewMindmap = async () => {
+  if (!newMindmapForm.value.title || !newMindmapForm.value.title.trim()) {
+    ElMessage.warning('请输入思维导图标题')
+    return
+  }
+  
+  try {
+    // 创建新思维导图
+    const data = {
+      title: newMindmapForm.value.title,
+      description: newMindmapForm.value.description,
+      visibility: newMindmapForm.value.visibility,
+      categoryId: props.categoryId,
+      content: tempMindmap.value.content
+    }
+    console.log('创建思维导图请求数据:', data)
+    
+    const response = await http.post('/mindmaps', data)
+    console.log('思维导图创建成功，响应数据:', response.data)
+    ElMessage.success('思维导图创建成功')
+    
+    // 退出创建模式
+    isCreating.value = false
+    
+    // 重新加载列表
+    await loadItems()
+    console.log('列表重新加载完成，当前项目数:', items.value.length)
+    
+    // 选中新创建的思维导图
+    const createdItem = items.value.find(item => item.id === response.data.id)
+    console.log('找到新创建的思维导图:', createdItem)
+    if (createdItem) {
+      selectItem(createdItem)
+    } else {
+      console.log('未找到新创建的思维导图，尝试选择第一个')
+      if (items.value.length > 0) {
+        selectItem(items.value[0])
+      }
+    }
+  } catch (error) {
+    ElMessage.error('保存失败: ' + (error.message || '未知错误'))
+  }
+}
+
+const cancelCreate = () => {
+  isCreating.value = false
+  // 如果有笔记项目，选择第一个
+  if (items.value.length > 0) {
+    selectItem(items.value[0])
+  } else {
+    // 如果没有笔记项目，清除选中项
+    selectedItem.value = null
+  }
+}
+
+// 删除不再需要的函数
+const startCreateNote = () => {
+  // 此函数已被移除，使用弹窗方式替代
+}
+
+// 上传封面
+async function onCoverChange(file) {
+  try {
+    const formData = new FormData()
+    formData.append('file', file.raw)
+    formData.append('dir', 'images')
+    
+    const { data } = await http.post('/files/upload', formData)
+    newNoteForm.value.coverKey = data
+    ElMessage.success('封面上传成功')
+  } catch (error) {
+    ElMessage.error('封面上传失败')
+  }
+}
+
+// 删除封面
+function removeCover() {
+  newNoteForm.value.coverKey = ''
+}
+
+// 上传图片并插入到内容中
+async function onImageChange(file) {
+  try {
+    const formData = new FormData()
+    formData.append('file', file.raw)
+    formData.append('dir', 'images')
+    
+    const { data } = await http.post('/files/upload', formData)
+    
+    // 将图片链接插入到内容中
+    const imageUrl = `https://aiknowledgebase.oss-cn-beijing.aliyuncs.com/${data}`
+    const imageMarkdown = `\n![image](${imageUrl})\n`
+    
+    newNoteForm.value.content += imageMarkdown
+    
+    ElMessage.success('图片上传成功')
+  } catch (error) {
+    ElMessage.error('图片上传失败')
+  }
+}
+
+// 生成封面URL
+function coverUrl(key) {
+  return `https://aiknowledgebase.oss-cn-beijing.aliyuncs.com/${key}`
+}
+
+// 处理思维导图保存事件
+const handleMindmapSave = (mindmapData) => {
+  // 更新临时思维导图数据
+  tempMindmap.value.content = mindmapData
+  // 调用保存函数
+  saveNewMindmap()
+}
+
+// 监控 noteContent 变化
+watch(noteContent, (newValue, oldValue) => {
+  console.log('noteContent发生变化:', {
+    oldLength: oldValue?.length || 0,
+    newLength: newValue?.length || 0,
+    newContent: newValue?.substring(0, 100) + '...'
+  })
+})
+
+// 监控 selectedItem 变化
+watch(selectedItem, (newValue, oldValue) => {
+  console.log('selectedItem发生变化:', {
+    oldId: oldValue?.id,
+    newId: newValue?.id,
+    newTitle: newValue?.title
+  })
+})
+
+// Lifecycle
+onMounted(() => {
+  console.log('🚀 KnowledgeContent组件挂载完成')
+  console.log('📋 Props:', { contentType: props.contentType, categoryId: props.categoryId })
+  loadCategory()
+  loadItems()
+})
+
+// Watch for route changes
+watch(() => [props.contentType, props.categoryId], () => {
+  // 当 categoryId 改变时，更新表单中的 categoryId
+  itemForm.value.categoryId = props.categoryId
+  newNoteForm.value.categoryId = props.categoryId
+  loadCategory()
+  loadItems()
+})
+</script>
+
+<style scoped>
+.knowledge-content-layout {
+  display: flex;
+  height: 100%;
+  background: #f5f7fa;
+  overflow: hidden;
+}
+
+/* Sidebar Styles */
+.sidebar {
+  width: 280px;
+  height: 100%;
+  background: white;
+  border-right: 1px solid #e4e7ed;
+  display: flex;
+  flex-direction: column;
+  transition: width 0.3s ease;
+}
+
+.sidebar.collapsed {
+  width: 60px;
+}
+
+.sidebar-header {
+  padding: 16px;
+  border-bottom: 1px solid #e4e7ed;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.sidebar-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar.collapsed .sidebar-header h3 {
+  display: none;
+}
+
+.collapse-btn {
+  padding: 4px;
+}
+
+.sidebar-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  min-height: 0;
+}
+
+.sidebar.collapsed .sidebar-content {
+  padding: 8px;
+}
+
+.search-box {
+  margin-bottom: 16px;
+}
+
+.sidebar.collapsed .search-box {
+  display: none;
+}
+
+.content-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.content-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+  border: 1px solid transparent;
+  position: relative;
+}
+
+.content-item:hover {
+  background: #f5f7fa;
+  border-color: #d1dbe5;
+}
+
+.content-item.active {
+  background: #e6f7ff;
+  border-color: #91d5ff;
+  color: #1890ff;
+}
+
+.item-main {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  cursor: pointer;
+  min-width: 0;
+}
+
+.item-icon {
+  margin-right: 12px;
+  flex-shrink: 0;
+}
+
+.sidebar.collapsed .item-icon {
+  margin-right: 0;
+}
+
+.item-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.item-more {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0;
+  transition: all 0.2s;
+  flex-shrink: 0;
+  margin-left: 8px;
+}
+
+.content-item:hover .item-more {
+  opacity: 1;
+}
+
+.item-more:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.content-item.active .item-more {
+  opacity: 1;
+}
+
+.item-title {
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 4px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.sidebar.collapsed .item-title {
+  display: none;
+}
+
+.item-meta {
+  font-size: 12px;
+  color: #909399;
+  display: flex;
+  gap: 8px;
+}
+
+.sidebar.collapsed .item-meta {
+  display: none;
+}
+
+.empty-state {
+  padding: 40px 20px;
+  text-align: center;
+}
+
+.outline-toggle {
+  text-align: right;
+  margin-bottom: 10px;
+}
+
+.sidebar-footer {
+  padding: 16px;
+  border-top: 1px solid #e4e7ed;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-shrink: 0;
+  background: white;
+}
+
+.import-btn {
+  width: 100%;
+}
+
+.sidebar.collapsed .sidebar-footer {
+  padding: 8px;
+}
+
+.add-btn {
+  width: 100%;
+}
+
+.sidebar.collapsed .add-btn span {
+  display: none;
+}
+
+/* Main Content Styles */
+.main-content {
+  flex: 1;
+  background: white;
+  overflow-y: auto;
+  transition: margin-left 0.3s ease;
+  padding: 0;
+}
+
+.content-display {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  max-width: 100%;
+}
+
+/* 新的简化标题栏 */
+.content-title-bar {
+  padding: 0px 24px;
+  border-bottom: 1px solid #e4e7ed;
+  background: #ffffff;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.content-title-bar h1 {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.create-actions {
+  display: flex;
+  gap: 8px;
+}
+
+/* 保留旧样式以防其他地方使用 */
+.content-header {
+  padding: 16px 24px;
+  border-bottom: 1px solid #e4e7ed;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.header-left h1 {
+  margin: 0 0 8px 0;
+  font-size: 20px;
+  font-weight: 600;
+  color: #303133;
+}
+
+.content-meta {
+  display: flex;
+  gap: 12px;
+  font-size: 12px;
+  color: #909399;
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.header-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.content-body {
+  flex: 1;
+  padding: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.note-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.content-display-area {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: #ffffff;
+  padding: 24px;
+  overflow-x: hidden;
+}
+
+.readonly-content {
+  line-height: 1.8;
+  font-size: 16px;
+  color: #303133;
+  padding: 20px;
+  border-radius: 4px;
+  background: white;
+  width: 100%;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.readonly-toolbar {
+  padding: 12px 24px;
+  background: #ffffff;
+}
+
+.edit-mode {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.editor-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.editor-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 0;
+  border-bottom: 1px solid #e4e7ed;
+  margin-bottom: 20px;
+}
+
+.editor-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.editor-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: calc(100% - 60px);
+}
+
+.md-editor {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.editor-textarea {
+  flex: 1;
+}
+
+.md-preview {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+}
+
+.readonly-content {
+  line-height: 1.8;
+  font-size: 16px;
+  color: #303133;
+  padding: 20px;
+  border-radius: 4px;
+  background: white;
+  max-width: 100%;
+  margin: 0 auto;
+  flex: 1;
+  overflow-y: auto;
+}
+
+.readonly-content :deep(img) {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 10px auto;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  max-height: 500px;
+  object-fit: contain;
+}
+
+.readonly-content :deep(h1),
+.readonly-content :deep(h2),
+.readonly-content :deep(h3),
+.readonly-content :deep(h4),
+.readonly-content :deep(h5),
+.readonly-content :deep(h6) {
+  margin-top: 24px;
+  margin-bottom: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+}
+
+.readonly-content :deep(p) {
+  margin-bottom: 16px;
+}
+
+.readonly-content :deep(code) {
+  background: #f6f8fa;
+  padding: 2px 4px;
+  border-radius: 3px;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-size: 14px;
+}
+
+.readonly-content :deep(pre) {
+  background: #f6f8fa;
+  padding: 16px;
+  border-radius: 6px;
+  overflow-x: auto;
+  margin-bottom: 16px;
+}
+
+.readonly-content :deep(blockquote) {
+  border-left: 4px solid #dfe2e5;
+  padding-left: 16px;
+  margin: 16px 0;
+  color: #6a737d;
+}
+
+.md-editor{border:1px solid #e4e7ed;border-radius:8px}
+.md-toolbar{padding:8px;border-bottom:1px solid #e4e7ed;background:#fafafa}
+.md-body{padding:12px}
+
+.readonly-content :deep(ul),
+.readonly-content :deep(ol) {
+  padding-left: 32px;
+  margin-bottom: 16px;
+}
+
+.mindmap-content {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.mindmap-info {
+  width: 100%;
+  max-width: 800px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 12px 0 rgba(0, 0, 0, 0.1);
+  padding: 24px;
+}
+
+.mindmap-header h2 {
+  margin: 0 0 16px 0;
+  color: #303133;
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.mindmap-meta {
+  display: flex;
+  gap: 20px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.meta-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  color: #909399;
+}
+
+.mindmap-description {
+  color: #606266;
+  font-size: 16px;
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+
+.mindmap-actions {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.mindmap-placeholder {
+  text-align: center;
+  padding: 40px;
+  background: #f8f9fa;
+  border-radius: 12px;
+  border: 2px dashed #dee2e6;
+  width: 100%;
+  max-width: 600px;
+}
+
+.mindmap-placeholder .el-icon {
+  color: #6c757d;
+  margin-bottom: 16px;
+}
+
+.mindmap-placeholder p {
+  color: #6c757d;
+  margin: 0 0 16px 0;
+  font-size: 16px;
+}
+
+.loading-content {
+  padding: 40px;
+}
+
+.empty-content {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 400px;
+}
+
+/* 新增笔记编辑器样式 */
+.note-editor-container {
+  height: 100%;
+}
+
+.markdown-editor {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+}
+
+.editor-toolbar {
+  border-bottom: 1px solid #dcdfe6;
+}
+
+.editor-tabs {
+  margin: 0 10px;
+}
+
+.editor-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.editor-pane,
+.preview-pane {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+}
+
+.markdown-textarea {
+  height: calc(100% - 80px);
+}
+
+.markdown-textarea :deep(.el-textarea__inner) {
+  height: 100%;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+}
+
+.image-upload-area {
+  display: flex;
+  align-items: center;
+  padding: 10px 0;
+  border-top: 1px solid #dcdfe6;
+  margin-top: 10px;
+}
+
+.image-upload {
+  margin-right: 15px;
+}
+
+.upload-tip {
+  color: #909399;
+  font-size: 12px;
+}
+
+.preview-pane {
+  background-color: #f5f7fa;
+}
+
+.readonly-content :deep(img) {
+  max-width: 100%;
+  height: auto;
+  display: block;
+  margin: 10px auto;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.readonly-content {
+  line-height: 1.8;
+  font-size: 16px;
+  color: #303133;
+  padding: 20px;
+  border-radius: 4px;
+  background: white;
+  max-width: 100%;
+}
+
+.cover-preview {
+  margin-top: 10px;
+  position: relative;
+  display: inline-block;
+}
+
+.cover-preview img {
+  max-width: 100%;
+  max-height: 150px;
+  border-radius: 4px;
+}
+
+.remove-cover-btn {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  opacity: 0.8;
+}
+
+/* 创建笔记头部表单样式 */
+.create-note-header {
+  padding: 20px;
+  background: white;
+  border-bottom: 1px solid #e4e7ed;
+  margin-bottom: 20px;
+}
+
+.create-note-header :deep(.el-form-item) {
+  margin-bottom: 16px;
+}
+
+.create-note-header :deep(.el-form-item:last-child) {
+  margin-bottom: 0;
+}
+
+/* 创建思维导图头部表单样式 */
+.create-mindmap-header {
+  padding: 20px;
+  background: white;
+  border-bottom: 1px solid #e4e7ed;
+  margin-bottom: 20px;
+  flex-shrink: 0;
+}
+
+.create-mindmap-header :deep(.el-form-item) {
+  margin-bottom: 16px;
+}
+
+.create-mindmap-header :deep(.el-form-item:last-child) {
+  margin-bottom: 0;
+}
+
+.mindmap-editor-container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* 创建思维导图表单样式 */
+.mindmap-create-form {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 40px 20px;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.create-form-container {
+  width: 100%;
+  max-width: 600px;
+  background: white;
+  border-radius: 8px;
+  padding: 32px;
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+}
+
+.form-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: #303133;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.mindmap-form {
+  margin-top: 20px;
+}
+
+.form-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+}
+
+.form-tip {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #f0f9ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  margin-top: 20px;
+  font-size: 14px;
+  color: #1e40af;
+  line-height: 1.6;
+}
+
+.form-tip .el-icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  font-size: 16px;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .knowledge-content-layout {
+    flex-direction: column;
+    height: auto;
+  }
+  
+  .sidebar {
+    width: 100%;
+    height: 300px;
+    border-right: none;
+    border-bottom: 1px solid #e4e7ed;
+  }
+  
+  .sidebar.collapsed {
+    width: 100%;
+    height: 60px;
+  }
+  
+  .main-content {
+    height: calc(100vh - 360px);
+  }
+  
+  .main-content.expanded {
+    margin-left: 0;
+  }
+  
+  .content-header {
+    flex-direction: column;
+    gap: 16px;
+  }
+  
+  .header-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+}
+</style>
