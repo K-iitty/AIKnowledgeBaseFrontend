@@ -91,6 +91,15 @@ function onTabChange() {}
   padding: 0 15px;
 }
 
+/* 选中标签的文字颜色和底部边框 */
+.navigation-tabs :deep(.el-tabs__item.is-active) {
+  color: #b0d9fe;
+}
+
+.navigation-tabs :deep(.el-tabs__active-bar) {
+  background-color: #b0d9fe;
+}
+
 .spacer {
   flex: 1;
 }

@@ -3,7 +3,17 @@
     <!-- Sidebar -->
     <div class="sidebar" :class="{ collapsed: sidebarCollapsed }">
       <div class="sidebar-header">
-        <h3>{{ currentCategory?.name || '知识库' }}</h3>
+        <div class="header-left">
+          <el-button 
+            link 
+            @click="goBack"
+            class="back-btn"
+            title="返回上一页"
+          >
+            <el-icon><ArrowLeft /></el-icon>
+          </el-button>
+          <h3>{{ currentCategory?.name || '知识库' }}</h3>
+        </div>
         <el-button 
           link 
           @click="sidebarCollapsed = !sidebarCollapsed"
@@ -33,14 +43,14 @@
         
         <!-- 大纲切换按钮 -->
         <div class="outline-toggle" v-if="props.contentType==='notes' && items.length > 0">
-          <el-button 
+          <div 
+            class="outline-toggle-btn"
             @click="sidebarMode = sidebarMode==='list' ? 'outline' : 'list'" 
-            size="small" 
-            circle
             :title="sidebarMode==='list' ? '查看大纲' : '返回列表'"
           >
-            <el-icon><List /></el-icon>
-          </el-button>
+            <span class="toggle-symbol">{{ sidebarMode==='list' ? '≡' : '≡' }}</span>
+            <span class="toggle-text">{{ sidebarMode==='list' ? '' : '' }}</span>
+          </div>
         </div>
 
         <!-- Content List -->
@@ -130,12 +140,25 @@
         </el-button>
         <!-- 导入按钮 -->
         <el-upload
-          v-if="(props.contentType==='notes' || props.contentType==='mindmaps') && !isCreating"
-          :action="props.contentType==='notes' ? '/api/notes/import' : '/api/mindmaps/import'"
+          v-if="props.contentType==='notes' && !isCreating"
+          :auto-upload="false"
+          :on-change="handleImportFile"
+          :show-file-list="false"
+          accept=".md,.pdf,text/markdown,application/pdf"
+          class="import-upload"
+        >
+          <el-button size="small" class="import-btn">
+            <el-icon><Upload /></el-icon>
+            导入
+          </el-button>
+        </el-upload>
+        <el-upload
+          v-else-if="props.contentType==='mindmaps' && !isCreating"
+          :action="'/api/mindmaps/import'"
           :headers="{ Authorization: 'Bearer ' + (typeof localStorage !== 'undefined' ? (localStorage.getItem('token')||'') : '') }"
           :data="{ categoryId: props.categoryId, visibility: 'private' }"
           :show-file-list="false"
-          :accept="props.contentType==='notes' ? '.md,text/markdown' : '.xmind,.mmap,application/vnd.xmind.workbook'"
+          accept=".xmind,.mmap,application/vnd.xmind.workbook"
           @success="loadItems"
           class="import-upload"
         >
@@ -165,29 +188,33 @@
         <!-- Content Body -->
         <div class="content-body">
           <!-- 显示已存在笔记的内容 -->
-          <div v-if="!isCreating && selectedItem && props.contentType === 'notes'" class="note-content">
-            <div class="readonly-toolbar" v-if="!isEditing">
-              <el-button type="primary" size="small" @click="startEditing">
-                <el-icon><Edit /></el-icon>
-                编辑
-              </el-button>
-            </div>
+          <div v-if="!isCreating && selectedItem && props.contentType === 'notes'" class="note-content" :class="{ 'pdf-note': isPdfNote }">
+            <!-- PDF 笔记：不显示工具栏和标题 -->
+            <template v-if="isPdfNote && !isEditing">
+              <div v-if="noteContent" class="pdf-content-display">
+                <div class="pdf-readonly-content" v-html="noteContent"></div>
+              </div>
+            </template>
             
-            <!-- 内容显示区域 -->
-            <div v-if="!isEditing && noteContent" class="content-display-area">
-              <div class="readonly-content" v-html="noteContent"></div>
-            </div>
-            
-            <!-- 如果noteContent为空，显示警告 -->
-            <!-- <div v-else-if="!isEditing && (!noteContent || noteContent.length === 0)" style="background: #fff3cd; padding: 15px; border-radius: 4px; border: 1px solid #ffeaa7; color: #856404;"> -->
-              <!-- <p><strong>暂无内容</strong></p> -->
-              <!-- <p>原始内容: {{ noteRaw || '无内容' }}</p> -->
-              <!-- <p>请检查控制台日志获取更多信息</p> -->
-            <!-- </div> -->
+            <!-- Markdown 笔记：保持原样 -->
+            <template v-else-if="!isPdfNote && !isEditing">
+              <div class="readonly-toolbar">
+                <el-button type="primary" size="small" @click="startEditing">
+                  <el-icon><Edit /></el-icon>
+                  编辑
+                </el-button>
+              </div>
+              
+              <!-- 内容显示区域 -->
+              <div v-if="noteContent" class="content-display-area">
+                <div class="readonly-content" v-html="noteContent"></div>
+              </div>
+            </template>
             
             <!-- 编辑模式 -->
-            <div v-else-if="isEditing" class="edit-mode">
-              <div class="editor-container">
+            <template v-else-if="isEditing">
+              <div class="edit-mode">
+                <div class="editor-container">
                 <div class="editor-toolbar">
                   <el-tabs v-model="activeTab" class="editor-tabs">
                     <el-tab-pane label="编辑" name="edit"></el-tab-pane>
@@ -198,12 +225,29 @@
                 <div class="editor-content">
                   <div v-show="activeTab === 'edit'" class="editor-pane">
                     <el-input
+                      ref="editTextarea"
                       v-model="editingContent"
                       type="textarea"
-                      :rows="20"
                       placeholder="请输入 Markdown 内容，支持图片上传"
                       class="editor-textarea"
                     />
+                    <div class="image-upload-area">
+                      <el-upload
+                        :auto-upload="false"
+                        :on-change="onEditImageChange"
+                        :show-file-list="false"
+                        accept="image/*"
+                        class="image-upload"
+                      >
+                        <el-button size="small" type="primary">
+                          <el-icon><Plus /></el-icon>
+                          上传图片
+                        </el-button>
+                      </el-upload>
+                      <div class="upload-tip">
+                        图片将自动上传到云端，插入到光标位置
+                      </div>
+                    </div>
                   </div>
                   
                   <div v-show="activeTab === 'preview'" class="preview-pane">
@@ -215,8 +259,9 @@
                   <el-button type="success" size="small" @click="saveContent">保存</el-button>
                   <el-button size="small" @click="cancelEdit">取消</el-button>
                 </div>
+                </div>
               </div>
-            </div>
+            </template>
           </div>
           
           <!-- 显示思维导图内容 -->
@@ -259,9 +304,9 @@
               <div class="editor-content">
                 <div v-show="activeTab === 'edit'" class="editor-pane">
                   <el-input
+                    ref="newNoteTextarea"
                     v-model="newNoteForm.content"
                     type="textarea"
-                    :rows="15"
                     placeholder="请输入 Markdown 内容，支持图片上传"
                     class="editor-textarea"
                   />
@@ -279,7 +324,7 @@
                       </el-button>
                     </el-upload>
                     <div class="upload-tip">
-                      图片将自动上传到云端，插入到内容中
+                      图片将自动上传到云端，插入到光标位置
                     </div>
                   </div>
                 </div>
@@ -383,7 +428,7 @@
       </el-form>
       <template #footer>
         <el-button @click="showAddDialog = false">取消</el-button>
-        <el-button type="primary" @click="saveNewItem">保存</el-button>
+        <el-button type="primary" @click="saveItem">保存</el-button>
       </template>
     </el-dialog>
   </div>
@@ -452,6 +497,10 @@ const editingContent = ref('')
 const activeTab = ref('edit')
 const isCreating = ref(false) // 新增状态，标识是否在创建笔记
 const loading = ref(false) // 添加加载状态
+
+// Refs for textareas
+const editTextarea = ref(null)
+const newNoteTextarea = ref(null)
 
 // Form
 const itemForm = ref({
@@ -545,6 +594,14 @@ const filterCollapsedOutline = (items) => {
 
 const previewContent = computed(() => {
   return marked(newNoteForm.value.content || '')
+})
+
+// 判断当前笔记是否是 PDF 类型
+const isPdfNote = computed(() => {
+  if (!selectedItem.value) return false
+  // 检查标签中是否包含 "PDF导入"
+  const tags = selectedItem.value.tags || ''
+  return tags.includes('PDF导入')
 })
 
 // Methods
@@ -1065,6 +1122,11 @@ const resetForm = () => {
   }
 }
 
+// 返回上一页
+const goBack = () => {
+  router.back()
+}
+
 // 新增方法用于显示添加对话框
 const showAddItem = () => {
   // 使用弹窗方式创建新笔记
@@ -1253,7 +1315,7 @@ function removeCover() {
   newNoteForm.value.coverKey = ''
 }
 
-// 上传图片并插入到内容中
+// 上传图片并插入到新建笔记内容中（光标位置）
 async function onImageChange(file) {
   try {
     const formData = new FormData()
@@ -1266,7 +1328,72 @@ async function onImageChange(file) {
     const imageUrl = `https://aiknowledgebase.oss-cn-beijing.aliyuncs.com/${data}`
     const imageMarkdown = `\n![image](${imageUrl})\n`
     
-    newNoteForm.value.content += imageMarkdown
+    // 获取光标位置并插入
+    if (newNoteTextarea.value) {
+      const textarea = newNoteTextarea.value.textarea || newNoteTextarea.value.$el?.querySelector('textarea')
+      if (textarea) {
+        const cursorPos = textarea.selectionStart
+        const content = newNoteForm.value.content
+        newNoteForm.value.content = 
+          content.substring(0, cursorPos) + 
+          imageMarkdown + 
+          content.substring(cursorPos)
+        
+        // 设置新的光标位置
+        setTimeout(() => {
+          textarea.selectionStart = textarea.selectionEnd = cursorPos + imageMarkdown.length
+          textarea.focus()
+        }, 0)
+      } else {
+        // 如果无法获取光标位置，追加到末尾
+        newNoteForm.value.content += imageMarkdown
+      }
+    } else {
+      newNoteForm.value.content += imageMarkdown
+    }
+    
+    ElMessage.success('图片上传成功')
+  } catch (error) {
+    ElMessage.error('图片上传失败')
+  }
+}
+
+// 上传图片并插入到编辑内容中（光标位置）
+async function onEditImageChange(file) {
+  try {
+    const formData = new FormData()
+    formData.append('file', file.raw)
+    formData.append('dir', 'images')
+    
+    const { data } = await http.post('/files/upload', formData)
+    
+    // 将图片链接插入到内容中
+    const imageUrl = `https://aiknowledgebase.oss-cn-beijing.aliyuncs.com/${data}`
+    const imageMarkdown = `\n![image](${imageUrl})\n`
+    
+    // 获取光标位置并插入
+    if (editTextarea.value) {
+      const textarea = editTextarea.value.textarea || editTextarea.value.$el?.querySelector('textarea')
+      if (textarea) {
+        const cursorPos = textarea.selectionStart
+        const content = editingContent.value
+        editingContent.value = 
+          content.substring(0, cursorPos) + 
+          imageMarkdown + 
+          content.substring(cursorPos)
+        
+        // 设置新的光标位置
+        setTimeout(() => {
+          textarea.selectionStart = textarea.selectionEnd = cursorPos + imageMarkdown.length
+          textarea.focus()
+        }, 0)
+      } else {
+        // 如果无法获取光标位置，追加到末尾
+        editingContent.value += imageMarkdown
+      }
+    } else {
+      editingContent.value += imageMarkdown
+    }
     
     ElMessage.success('图片上传成功')
   } catch (error) {
@@ -1277,6 +1404,149 @@ async function onImageChange(file) {
 // 生成封面URL
 function coverUrl(key) {
   return `https://aiknowledgebase.oss-cn-beijing.aliyuncs.com/${key}`
+}
+
+// 处理文件导入
+async function handleImportFile(file) {
+  const fileName = file.name
+  const fileType = fileName.substring(fileName.lastIndexOf('.')).toLowerCase()
+  
+  try {
+    if (fileType === '.pdf') {
+      // 处理 PDF 文件
+      await handlePdfImport(file)
+    } else if (fileType === '.md') {
+      // 处理 Markdown 文件
+      await handleMarkdownImport(file)
+    } else {
+      ElMessage.error('不支持的文件格式，请上传 .md 或 .pdf 文件')
+    }
+  } catch (error) {
+    console.error('文件导入失败:', error)
+    ElMessage.error('文件导入失败')
+  }
+}
+
+// 处理 PDF 文件导入
+async function handlePdfImport(file) {
+  try {
+    ElMessage.info('正在上传 PDF 文件...')
+    
+    // 上传 PDF 文件到 OSS
+    const formData = new FormData()
+    formData.append('file', file.raw)
+    formData.append('dir', 'pdfs')
+    
+    const { data: pdfKey } = await http.post('/files/upload', formData)
+    const pdfUrl = `https://aiknowledgebase.oss-cn-beijing.aliyuncs.com/${pdfKey}`
+    
+    // 创建笔记，内容为 PDF 嵌入显示（直接使用后端代理）
+    const title = file.name.replace('.pdf', '')
+    // 使用后端代理 URL（使用后端端口 8081）
+    const backendUrl = window.location.hostname === 'localhost' 
+      ? 'http://localhost:8081' 
+      : window.location.origin
+    const proxyUrl = `${backendUrl}/api/files/proxy-pdf?key=${encodeURIComponent(pdfKey)}`
+    
+    const content = `# ${title}
+
+<div class="pdf-viewer-wrapper">
+  <iframe src="${proxyUrl}" class="pdf-viewer-iframe" type="application/pdf"></iframe>
+</div>`
+    
+    const noteData = {
+      title: title,
+      content: content,
+      categoryId: props.categoryId,
+      visibility: 'private',
+      tags: 'PDF导入'
+    }
+    
+    await http.post('/notes', noteData)
+    ElMessage.success('PDF 文件导入成功')
+    loadItems()
+  } catch (error) {
+    console.error('PDF 导入失败:', error)
+    throw error
+  }
+}
+
+// 处理 Markdown 文件导入
+async function handleMarkdownImport(file) {
+  try {
+    ElMessage.info('正在处理 Markdown 文件...')
+    
+    // 读取文件内容
+    const text = await file.raw.text()
+    
+    // 提取标题（第一行 # 开头）
+    const titleMatch = text.match(/^#\s+(.+)$/m)
+    const title = titleMatch ? titleMatch[1] : file.name.replace('.md', '')
+    
+    // 处理图片：查找所有图片引用
+    const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g
+    let processedContent = text
+    const imageMatches = [...text.matchAll(imageRegex)]
+    
+    if (imageMatches.length > 0) {
+      ElMessage.info(`发现 ${imageMatches.length} 张图片，正在上传...`)
+      
+      // 处理每个图片
+      for (const match of imageMatches) {
+        const fullMatch = match[0]
+        const altText = match[1]
+        const imagePath = match[2]
+        
+        // 如果是相对路径或本地路径，需要提示用户
+        if (!imagePath.startsWith('http://') && !imagePath.startsWith('https://')) {
+          console.warn('发现本地图片路径:', imagePath)
+          // 保持原样，或者可以提示用户手动上传
+          ElMessage.warning(`图片 "${imagePath}" 是本地路径，请手动上传后替换`)
+        } else if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+          // 网络图片，尝试下载并上传到 OSS
+          try {
+            const imageUrl = await downloadAndUploadImage(imagePath)
+            processedContent = processedContent.replace(fullMatch, `![${altText}](${imageUrl})`)
+          } catch (error) {
+            console.error('图片上传失败:', imagePath, error)
+            ElMessage.warning(`图片 "${imagePath}" 上传失败，保持原链接`)
+          }
+        }
+      }
+    }
+    
+    // 创建笔记
+    const noteData = {
+      title: title,
+      content: processedContent,
+      categoryId: props.categoryId,
+      visibility: 'private',
+      tags: 'Markdown导入'
+    }
+    
+    await http.post('/notes', noteData)
+    ElMessage.success('Markdown 文件导入成功')
+    loadItems()
+  } catch (error) {
+    console.error('Markdown 导入失败:', error)
+    throw error
+  }
+}
+
+// 下载网络图片并上传到 OSS
+async function downloadAndUploadImage(imageUrl) {
+  try {
+    // 通过后端代理下载图片
+    const response = await http.post('/files/download-and-upload', {
+      url: imageUrl,
+      dir: 'images'
+    })
+    
+    return `https://aiknowledgebase.oss-cn-beijing.aliyuncs.com/${response.data}`
+  } catch (error) {
+    console.error('图片下载上传失败:', error)
+    throw error
+  }
 }
 
 // 处理思维导图保存事件
@@ -1363,6 +1633,26 @@ watch(() => [props.contentType, props.categoryId], () => {
   align-items: center;
 }
 
+.header-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+
+.back-btn {
+  padding: 4px;
+  color: #606266;
+  font-size: 22px;
+  flex-shrink: 0;
+  font-weight: 1000;
+}
+
+.back-btn:hover {
+  color: #409eff;
+}
+
 .sidebar-header h3 {
   margin: 0;
   font-size: 16px;
@@ -1376,8 +1666,13 @@ watch(() => [props.contentType, props.categoryId], () => {
   display: none;
 }
 
+.sidebar.collapsed .back-btn {
+  display: none;
+}
+
 .collapse-btn {
   padding: 4px;
+  flex-shrink: 0;
 }
 
 .sidebar-content {
@@ -1585,8 +1880,37 @@ watch(() => [props.contentType, props.categoryId], () => {
 }
 
 .outline-toggle {
-  text-align: right;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.outline-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background 0.2s;
+  user-select: none;
+}
+
+.outline-toggle-btn:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.toggle-symbol {
+  font-size: 18px;
+  font-weight: bold;
+  color: #606266;
+  line-height: 1;
+}
+
+.toggle-text {
+  font-size: 13px;
+  color: #606266;
+  font-weight: 500;
 }
 
 .sidebar-footer {
@@ -1600,7 +1924,9 @@ watch(() => [props.contentType, props.categoryId], () => {
 }
 
 .import-btn {
-  width: 100%;
+  /* width: 100%; */
+  width: 248px !important;
+  
 }
 
 .sidebar.collapsed .sidebar-footer {
@@ -1703,6 +2029,56 @@ watch(() => [props.contentType, props.categoryId], () => {
   height: 100%;
 }
 
+/* PDF 笔记特殊样式：占满整个区域 */
+.note-content.pdf-note {
+  padding: 0;
+  margin: 0;
+}
+
+.pdf-content-display {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+}
+
+.pdf-readonly-content {
+  flex: 1;
+  height: 100%;
+  width: 100%;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
+}
+
+/* PDF 笔记中隐藏 Markdown 标题（不是 PDF 查看器的工具栏） */
+.pdf-readonly-content :deep(h1:first-child) {
+  display: none;
+}
+
+/* PDF 查看器容器占满空间 */
+.pdf-readonly-content :deep(.pdf-viewer-wrapper) {
+  height: 100%;
+  width: 100%;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* PDF iframe 占满整个空间，保留查看器工具栏 */
+.pdf-readonly-content :deep(.pdf-viewer-iframe) {
+  flex: 1;
+  width: 100%;
+  height: 100%;
+  min-height: unset;
+  border: none;
+  border-radius: 0;
+}
+
 .content-display-area {
   flex: 1;
   display: flex;
@@ -1772,6 +2148,15 @@ watch(() => [props.contentType, props.categoryId], () => {
 
 .editor-textarea {
   flex: 1;
+  height: 100%;
+}
+
+.editor-textarea :deep(.el-textarea__inner) {
+  height: 100% !important;
+  resize: none;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
+  font-size: 14px;
+  line-height: 1.6;
 }
 
 .md-preview {
@@ -1843,6 +2228,23 @@ watch(() => [props.contentType, props.categoryId], () => {
   padding-left: 16px;
   margin: 16px 0;
   color: #6a737d;
+}
+
+/* PDF 查看器样式（用于 Markdown 笔记中嵌入的 PDF） */
+.readonly-content :deep(.pdf-viewer-wrapper) {
+  width: 100%;
+  margin: 24px 0;
+  background: #fff;
+}
+
+.readonly-content :deep(.pdf-viewer-iframe) {
+  width: 100%;
+  min-height: 800px;
+  height: calc(100vh - 250px);
+  border: 1px solid #e4e7ed;
+  border-radius: 6px;
+  display: block;
+  background: #fff;
 }
 
 .md-editor{border:1px solid #e4e7ed;border-radius:8px}
@@ -1959,6 +2361,15 @@ watch(() => [props.contentType, props.categoryId], () => {
   margin: 0 10px;
 }
 
+/* 编辑器标签选中状态的文字颜色和底部边框 */
+.editor-tabs :deep(.el-tabs__item.is-active) {
+  color: #b0d9fe;
+}
+
+.editor-tabs :deep(.el-tabs__active-bar) {
+  background-color: #b0d9fe;
+}
+
 .editor-content {
   flex: 1;
   display: flex;
@@ -1971,6 +2382,9 @@ watch(() => [props.contentType, props.categoryId], () => {
   flex: 1;
   overflow-y: auto;
   padding: 10px;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .markdown-textarea {
@@ -2046,7 +2460,7 @@ watch(() => [props.contentType, props.categoryId], () => {
   padding: 20px;
   background: white;
   border-bottom: 1px solid #e4e7ed;
-  margin-bottom: 20px;
+  margin-bottom: 5px;
 }
 
 .create-note-header :deep(.el-form-item) {

@@ -1130,26 +1130,32 @@ onUnmounted(() => {
 
 .mindmap-container :deep(svg) {
   /* 确保SVG连接线使用柔和的颜色 */
-  stroke: #42b983 !important;
+  stroke: #4b96ff !important;
   stroke-width: 2px !important;
+  /* 连线层级设置为最底层 */
+  position: relative;
+  z-index: 1 !important;
 }
 
 .mindmap-container :deep(.root) {
   /* 确保根节点可见 */
-  background: #42b983 !important;
+  background: #4b96ff !important;
   color: white !important;
-  border: 2px solid #42b983 !important;
+  border: 2px solid #4b96ff !important;
   padding: 8px 16px !important;
   border-radius: 8px !important;
   font-size: 16px !important;
   font-weight: bold !important;
   min-width: 100px !important;
   min-height: 40px !important;
+  /* 根节点层级设置为高于连线 */
+  position: relative;
+  z-index: 10 !important;
 }
 
 .mindmap-container :deep(.main-node) {
   /* 确保主节点有清晰的边框 */
-  background: white !important;
+  background: rgb(120, 238, 252) !important;
   border: 1px solid #409eff !important;
   padding: 6px 12px !important;
   border-radius: 4px !important;
@@ -1159,14 +1165,18 @@ onUnmounted(() => {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1) !important;
   transition: all 0.2s ease;
   position: relative;
+  /* 主节点层级设置为高于连线 */
+  z-index: 10 !important;
 }
 
 .mindmap-container :deep(.root-node) {
   /* 确保根节点有特殊的样式 */
-  border: 2px solid #42b983 !important;
+  border: 2px solid #4b96ff !important;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15) !important;
   transition: all 0.2s ease;
   position: relative;
+  /* 根节点层级设置为高于连线 */
+  z-index: 10 !important;
 }
 
 .mindmap-container :deep(.main-node:hover) {
