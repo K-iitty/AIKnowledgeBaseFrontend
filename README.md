@@ -1,6 +1,4 @@
-# 🧠 AI 知识库管理系统
-
-<div align="center">
+# AI 知识库管理系统
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.7-brightgreen.svg)
@@ -16,9 +14,9 @@
 - 前端：[K-iitty/AIKnowledgeBaseFrontend: 智能问答知识库](https://github.com/K-iitty/AIKnowledgeBaseFrontend)
 - 后端：[K-iitty/AIKnowledgeBaseBackend: 智能问答知识库](https://github.com/K-iitty/AIKnowledgeBaseBackend)
 
-## ✨ 功能特性
+##  功能特性
 
-### 🤖 AI 智能助手
+### AI 智能助手
 
 - **智能对话**：集成阿里云通义千问大模型
 - **RAG 检索增强**：基于本地知识库的智能问答
@@ -27,7 +25,7 @@
 - **智能摘要**：自动生成内容摘要
 - **上下文记忆**：支持多轮对话上下文
 
-### 📝 笔记管理
+### 笔记管理
 
 - **Markdown 编辑器**：支持实时预览、语法高亮
 - **分类管理**：树形分类结构，支持拖拽排序
@@ -36,57 +34,58 @@
 - **导出功能**：支持导出为 Markdown 或 PDF
 - **封面设置**：自定义笔记封面图片
 
-### 🗺️ 思维导图
+### 思维导图
+
 - **可视化编辑**：基于 jsMind 的交互式思维导图编辑器
 - **节点管理**：支持添加、编辑、删除节点
 - **节点备注**：为每个节点添加详细备注
 - **导入导出**：支持 XMind 格式导入导出
 
-### 🔗 链接收藏
+### 链接收藏
+
 - **网址管理**：收藏常用网站链接
 - **分类整理**：按类别组织链接
 - **图标显示**：自动获取网站图标
 - **快速访问**：一键跳转到收藏网站
 
-### 🔐 用户系统
+### 用户系统
+
 - **用户注册/登录**：JWT Token 认证
 - **权限管理**：基于 Spring Security 的权限控制
 - **个人中心**：用户信息管理
 - **数据隔离**：用户数据完全隔离
 
----
-
-## 🛠️ 技术栈
+## 技术栈
 
 ### 后端技术
-| 技术 | 版本 | 说明 |
-|------|------|------|
-| Spring Boot | 3.5.7 | 核心框架 |
-| Spring Security | 6.x | 安全框架 |
-| MyBatis Plus | 3.5.5 | ORM 框架 |
-| MySQL | 8.0+ | 关系型数据库 |
-| Redis | 7.x | 缓存数据库 |
-| JWT | 0.11.5 | Token 认证 |
-| Spring AI Alibaba | 1.0.0.2 | AI 集成框架 |
-| 阿里云 OSS | 3.17.4 | 对象存储 |
-| PDFBox | 2.0.30 | PDF 处理 |
-| Knife4j | 4.4.0 | API 文档 |
-| Lombok | 1.18.32 | 代码简化 |
+
+| 技术              | 版本    | 说明         |
+| ----------------- | ------- | ------------ |
+| Spring Boot       | 3.5.7   | 核心框架     |
+| Spring Security   | 6.x     | 安全框架     |
+| MyBatis Plus      | 3.5.5   | ORM 框架     |
+| MySQL             | 8.0+    | 关系型数据库 |
+| Redis             | 7.x     | 缓存数据库   |
+| JWT               | 0.11.5  | Token 认证   |
+| Spring AI Alibaba | 1.0.0.2 | AI 集成框架  |
+| 阿里云 OSS        | 3.17.4  | 对象存储     |
+| PDFBox            | 2.0.30  | PDF 处理     |
+| Knife4j           | 4.4.0   | API 文档     |
+| Lombok            | 1.18.32 | 代码简化     |
 
 ### 前端技术
-| 技术 | 版本 | 说明 |
-|------|------|------|
-| Vue | 3.5.6 | 前端框架 |
-| Vue Router | 4.4.5 | 路由管理 |
-| Element Plus | 2.8.6 | UI 组件库 |
-| Axios | 1.7.7 | HTTP 客户端 |
-| Marked | 17.0.0 | Markdown 解析 |
-| jsMind | 0.8.5 | 思维导图库 |
-| Vite | 5.4.10 | 构建工具 |
 
----
+| 技术         | 版本   | 说明          |
+| ------------ | ------ | ------------- |
+| Vue          | 3.5.6  | 前端框架      |
+| Vue Router   | 4.4.5  | 路由管理      |
+| Element Plus | 2.8.6  | UI 组件库     |
+| Axios        | 1.7.7  | HTTP 客户端   |
+| Marked       | 17.0.0 | Markdown 解析 |
+| jsMind       | 0.8.5  | 思维导图库    |
+| Vite         | 5.4.10 | 构建工具      |
 
-## 🚀 快速开始
+## 快速开始
 
 ### 环境要求
 
@@ -99,6 +98,7 @@
 ### 后端启动
 
 1. **克隆项目**
+
 ```bash
 git clone <repository-url>
 cd xian-AIKnowledgeBase/AIKnowledgeBaseBackend/AIKnowledgeBaseBackend
@@ -107,6 +107,7 @@ cd xian-AIKnowledgeBase/AIKnowledgeBaseBackend/AIKnowledgeBaseBackend
 2. **配置数据库**
 
 创建数据库：
+
 ```sql
 CREATE DATABASE aiknowledgebase CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
@@ -171,16 +172,19 @@ mvn spring-boot:run
 ### 前端启动
 
 1. **进入前端目录**
+
 ```bash
 cd xian-AIKnowledgeBase/AIKnowledgeBaseFrontend
 ```
 
 2. **安装依赖**
+
 ```bash
 npm install
 ```
 
 3. **启动开发服务器**
+
 ```bash
 npm run dev
 ```
@@ -188,11 +192,10 @@ npm run dev
 前端服务将在 `http://localhost:5173` 启动
 
 4. **构建生产版本**
+
 ```bash
 npm run build
 ```
-
----
 
 ## 页面
 
@@ -212,7 +215,7 @@ npm run build
 
 ![PixPin_2025-11-16_22-27-40](./assets/PixPin_2025-11-16_22-27-40.png)
 
-## 📁 项目结构
+##  项目结构
 
 ### 后端结构
 
@@ -318,11 +321,12 @@ AIKnowledgeBaseFrontend/
 
 ---
 
-## 📡 API 文档
+## API 文档
 
 ### 访问 Swagger UI
 
 启动后端后，访问：
+
 - Swagger UI: `http://localhost:8081/swagger-ui.html`
 - Knife4j UI: `http://localhost:8081/doc.html`
 
@@ -366,7 +370,7 @@ AIKnowledgeBaseFrontend/
 
 ---
 
-## 🔧 配置说明
+##  配置说明
 
 ### 必需配置
 
@@ -399,7 +403,7 @@ AIKnowledgeBaseFrontend/
 - **Token 过期时间**：默认 7 天
 - **AI 模型参数**：temperature、model 等
 
-## 📝 开发规范
+## 开发规范
 
 ### 代码规范
 
@@ -408,28 +412,19 @@ AIKnowledgeBaseFrontend/
 - **命名**：使用有意义的变量名和函数名
 - **注释**：关键逻辑添加注释说明
 
-## 📄 License
+## License
 
 本项目采用 MIT 许可证。详见 [LICENSE](LICENSE) 文件。
 
----
-
-## 👥 贡献
+##  贡献
 
 欢迎提交 Issue 和 Pull Request！
 
----
-
-## 📧 联系方式
+##  联系方式
 
 如有问题或建议，请通过以下方式联系：
 
 - 提交 Issue
 
----
-
-<div align="center">
-
 **⭐ 如果这个项目对你有帮助，请给一个 Star！⭐**
-
 
