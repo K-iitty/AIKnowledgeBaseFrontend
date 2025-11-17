@@ -60,12 +60,33 @@ function toLogin(){ router.push('/login') }
 </script>
 
 <style scoped>
-.login-root{min-height:100vh;display:flex;align-items:center;justify-content:center}
-.login-hero{position:absolute;top:10%;left:50%;transform:translateX(-50%);text-align:center}
-.brand{font-size:28px;font-weight:700;color:#3b6cb7}
-.subtitle{margin-top:6px;color:#666}
-.login-card{width:420px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.08)}
-.title{font-size:20px;font-weight:600;margin-bottom:8px}
-.actions{margin-top:10px;text-align:right}
-.actions a{color:#333;cursor:pointer}
+.login-root{
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center
+}
+.login-hero{
+  position:absolute;
+  top:10%;left:50%;
+  transform:translateX(-50%);
+  text-align:center
+}
+.brand{
+  font-size:28px;
+  font-weight:700;
+  color:#6ba6ff
+}
+.subtitle{
+  margin-top:6px;
+  color:#666;
+  margin-bottom:20px}
+.login-card{
+  margin-top: 60px !important;width:420px;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.08)}
+.title{
+  font-size:20px;font-weight:600;margin-bottom:8px}
+.actions{
+  margin-top:10px;text-align:right}
+.actions a{
+  color:#333;cursor:pointer}
 </style>
