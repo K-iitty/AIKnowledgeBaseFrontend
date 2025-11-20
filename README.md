@@ -1,7 +1,6 @@
-# AI 知识库管理系统
+# 🧠 AI 知识库管理系统
 
-
-
+<div align="center">
 
 ![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)
 ![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.7-brightgreen.svg)
@@ -37,19 +36,19 @@
 - **导出功能**：支持导出为 Markdown 或 PDF
 - **封面设置**：自定义笔记封面图片
 
-### 思维导图
+### 🗺️ 思维导图
 - **可视化编辑**：基于 jsMind 的交互式思维导图编辑器
 - **节点管理**：支持添加、编辑、删除节点
 - **节点备注**：为每个节点添加详细备注
 - **导入导出**：支持 XMind 格式导入导出
 
-### 链接收藏
+### 🔗 链接收藏
 - **网址管理**：收藏常用网站链接
 - **分类整理**：按类别组织链接
 - **图标显示**：自动获取网站图标
 - **快速访问**：一键跳转到收藏网站
 
-### 用户系统
+### 🔐 用户系统
 - **用户注册/登录**：JWT Token 认证
 - **权限管理**：基于 Spring Security 的权限控制
 - **个人中心**：用户信息管理
@@ -58,19 +57,20 @@
 ## 技术栈
 
 ### 后端技术
-| 技术 | 版本 | 说明 |
-|------|------|------|
-| Spring Boot | 3.5.7 | 核心框架 |
-| Spring Security | 6.x | 安全框架 |
-| MyBatis Plus | 3.5.5 | ORM 框架 |
-| MySQL | 8.0+ | 关系型数据库 |
-| Redis | 7.x | 缓存数据库 |
-| JWT | 0.11.5 | Token 认证 |
-| Spring AI Alibaba | 1.0.0.2 | AI 集成框架 |
-| 阿里云 OSS | 3.17.4 | 对象存储 |
-| PDFBox | 2.0.30 | PDF 处理 |
-| Knife4j | 4.4.0 | API 文档 |
-| Lombok | 1.18.32 | 代码简化 |
+
+| 技术              | 版本    | 说明         |
+| ----------------- | ------- | ------------ |
+| Spring Boot       | 3.5.7   | 核心框架     |
+| Spring Security   | 6.x     | 安全框架     |
+| MyBatis Plus      | 3.5.5   | ORM 框架     |
+| MySQL             | 8.0+    | 关系型数据库 |
+| Redis             | 7.x     | 缓存数据库   |
+| JWT               | 0.11.5  | Token 认证   |
+| Spring AI Alibaba | 1.0.0.2 | AI 集成框架  |
+| 阿里云 OSS        | 3.17.4  | 对象存储     |
+| PDFBox            | 2.0.30  | PDF 处理     |
+| Knife4j           | 4.4.0   | API 文档     |
+| Lombok            | 1.18.32 | 代码简化     |
 
 ### 前端技术
 | 技术 | 版本 | 说明 |
@@ -83,7 +83,9 @@
 | jsMind | 0.8.5 | 思维导图库 |
 | Vite | 5.4.10 | 构建工具 |
 
-## 快速开始
+---
+
+## 🚀 快速开始
 
 ### 环境要求
 
@@ -96,6 +98,7 @@
 ### 后端启动
 
 1. **克隆项目**
+
 ```bash
 git clone <repository-url>
 cd xian-AIKnowledgeBase/AIKnowledgeBaseBackend/AIKnowledgeBaseBackend
@@ -104,6 +107,7 @@ cd xian-AIKnowledgeBase/AIKnowledgeBaseBackend/AIKnowledgeBaseBackend
 2. **配置数据库**
 
 创建数据库：
+
 ```sql
 CREATE DATABASE aiknowledgebase CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
@@ -168,16 +172,19 @@ mvn spring-boot:run
 ### 前端启动
 
 1. **进入前端目录**
+
 ```bash
 cd xian-AIKnowledgeBase/AIKnowledgeBaseFrontend
 ```
 
 2. **安装依赖**
+
 ```bash
 npm install
 ```
 
 3. **启动开发服务器**
+
 ```bash
 npm run dev
 ```
@@ -185,6 +192,7 @@ npm run dev
 前端服务将在 `http://localhost:5173` 启动
 
 4. **构建生产版本**
+
 ```bash
 npm run build
 ```
@@ -320,6 +328,7 @@ AIKnowledgeBaseFrontend/
 ### 访问 Swagger UI
 
 启动后端后，访问：
+
 - Swagger UI: `http://localhost:8081/swagger-ui.html`
 - Knife4j UI: `http://localhost:8081/doc.html`
 
