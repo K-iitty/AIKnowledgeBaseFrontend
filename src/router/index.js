@@ -22,7 +22,7 @@ const routes = [
     path: '/',
     component: MainLayout,
     children: [
-      { path: '', redirect: '/notes' },
+      { path: '', redirect: '/ai' },
       {
         path: '/notes',
         name: 'Notes',

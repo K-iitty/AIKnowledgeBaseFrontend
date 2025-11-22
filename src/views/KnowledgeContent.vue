@@ -154,17 +154,15 @@
         </el-upload>
         <el-upload
           v-else-if="props.contentType==='mindmaps' && !isCreating"
-          :action="'/api/mindmaps/import'"
-          :headers="{ Authorization: 'Bearer ' + (typeof localStorage !== 'undefined' ? (localStorage.getItem('token')||'') : '') }"
-          :data="{ categoryId: props.categoryId, visibility: 'private' }"
+          :auto-upload="true"
+          :http-request="handleMindmapImport"
           :show-file-list="false"
-          accept=".xmind,.mmap,application/vnd.xmind.workbook"
-          @success="loadItems"
+          accept=".xmind,.mmap"
           class="import-upload"
         >
           <el-button size="small" class="import-btn">
             <el-icon><Upload /></el-icon>
-            导入
+            导入XMind
           </el-button>
         </el-upload>
       </div>
@@ -1404,6 +1402,70 @@ async function onEditImageChange(file) {
 // 生成封面URL
 function coverUrl(key) {
   return `https://aiknowledgebase.oss-cn-beijing.aliyuncs.com/${key}`
+}
+
+// 处理思维导图导入
+async function handleMindmapImport(options) {
+  const { file } = options
+  
+  try {
+    ElMessage.info('正在解析XMind文件...')
+    
+    // 动态导入解析器
+    const { parseXMindFile, convertToProjectFormat } = await import('@/utils/xmindParser.js')
+    
+    // 前端解析XMind文件
+    const xmindData = await parseXMindFile(file)
+    
+    // 转换为项目格式 { nodeData: {...}, linkData: {} }
+    const projectData = convertToProjectFormat(xmindData)
+    
+    // 统计节点数
+    const nodeCount = countNodesInData(projectData.nodeData)
+    
+    // 提取标题
+    const title = file.name.replace('.xmind', '').replace('.mmap', '') || '思维导图'
+    
+    console.log('解析完成，准备上传:', { title, nodeCount, data: projectData })
+    
+    ElMessage.info('正在保存思维导图...')
+    
+    // 发送JSON数据到后端
+    const { data } = await http.post('/mindmaps/import-json', {
+      categoryId: props.categoryId,
+      title: title,
+      content: JSON.stringify(projectData),
+      nodeCount: nodeCount,
+      visibility: 'private'
+    })
+    
+    ElMessage.success('导入成功！')
+    await loadItems()
+    
+    // 选中新导入的思维导图
+    if (data && data.id) {
+      const importedItem = items.value.find(item => item.id === data.id)
+      if (importedItem) {
+        selectItem(importedItem)
+      }
+    }
+  } catch (error) {
+    console.error('导入失败:', error)
+    ElMessage.error('导入失败: ' + (error.message || '未知错误'))
+  }
+}
+
+// 统计节点数量
+function countNodesInData(node) {
+  if (!node) return 0
+  
+  let total = 1
+  if (node.children && Array.isArray(node.children)) {
+    node.children.forEach(child => {
+      total += countNodesInData(child)
+    })
+  }
+  return total
 }
 
 // 处理文件导入

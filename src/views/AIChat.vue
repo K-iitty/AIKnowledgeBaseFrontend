@@ -88,6 +88,81 @@ import http from '../api/http'
 import { ref, nextTick, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Loading } from '@element-plus/icons-vue'
+import { marked } from 'marked'
+import hljs from 'highlight.js'
+import 'highlight.js/styles/atom-one-dark.css'
+
+// Configure marked with custom renderer
+const renderer = new marked.Renderer()
+
+// Configure marked options
+marked.setOptions({
+  renderer: renderer,
+  gfm: true,
+  breaks: true,
+  pedantic: false,
+  sanitize: false,
+  smartLists: true,
+  smartypants: false,
+  xhtml: false
+})
+
+// Set up highlight.js for code blocks
+marked.use({
+  renderer: {
+    code(code, infostring) {
+      // Ensure code is a string and handle token objects
+      let codeStr = ''
+      if (typeof code === 'string') {
+        codeStr = code
+      } else if (code && typeof code === 'object' && code.text) {
+        codeStr = code.text
+      } else {
+        codeStr = String(code || '')
+      }
+      
+      const lang = String(infostring || '').trim()
+      const validLanguage = lang && hljs.getLanguage(lang) ? lang : 'plaintext'
+      const displayLang = lang || 'text'
+      
+      try {
+        const highlighted = hljs.highlight(codeStr, { language: validLanguage }).value
+        return `
+          <div class="code-block-wrapper">
+            <div class="code-block-header">
+              <span class="code-block-lang">${displayLang}</span>
+              <button class="code-block-copy" onclick="copyCode(this)" title="复制代码">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                <span>复制</span>
+              </button>
+            </div>
+            <pre><code class="hljs language-${validLanguage}">${highlighted}</code></pre>
+          </div>`
+      } catch (e) {
+        console.error('代码高亮失败:', e, '语言:', lang)
+        // Fallback to plain code block if highlighting fails
+        const escaped = codeStr.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        return `
+          <div class="code-block-wrapper">
+            <div class="code-block-header">
+              <span class="code-block-lang">${displayLang}</span>
+              <button class="code-block-copy" onclick="copyCode(this)" title="复制代码">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                <span>复制</span>
+              </button>
+            </div>
+            <pre><code class="hljs language-${validLanguage}">${escaped}</code></pre>
+          </div>`
+      }
+    }
+  }
+})
 
 const input = ref('')
 const messages = ref([])
@@ -152,75 +227,23 @@ function formatTime(timeStr) {
 
 function formatMessage(content) {
   if (!content) return ''
-  
-  // Enhanced markdown-like formatting
-  let html = content
-    // Escape HTML first (but preserve emoji and special chars)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-  
-  // Process line by line for better control
-  const lines = html.split('\n')
-  const result = []
-  let inList = false
-  
-  for (let i = 0; i < lines.length; i++) {
-    let line = lines[i]
-    let addBreak = true  // Whether to add <br> after this line
-    
-    // Headers
-    if (line.match(/^### /)) {
-      if (inList) { result.push('</ul>'); inList = false }
-      line = line.replace(/^### (.*)$/, '<h3>$1</h3>')
-      addBreak = false
-    } else if (line.match(/^## /)) {
-      if (inList) { result.push('</ul>'); inList = false }
-      line = line.replace(/^## (.*)$/, '<h2>$1</h2>')
-      addBreak = false
-    } else if (line.match(/^# /)) {
-      if (inList) { result.push('</ul>'); inList = false }
-      line = line.replace(/^# (.*)$/, '<h1>$1</h1>')
-      addBreak = false
-    }
-    // Horizontal rule
-    else if (line.match(/^---$/)) {
-      if (inList) { result.push('</ul>'); inList = false }
-      line = '<hr>'
-      addBreak = false
-    }
-    // List items
-    else if (line.match(/^- /)) {
-      if (!inList) { result.push('<ul>'); inList = true }
-      line = line.replace(/^- (.*)$/, '<li>$1</li>')
-      addBreak = false  // Don't add <br> inside lists
-    }
-    // Regular line
-    else {
-      if (inList && line.trim() === '') {
-        result.push('</ul>')
-        inList = false
-        addBreak = false
-      }
-      if (line.trim() !== '') {
-        // Bold and italic
-        line = line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-        line = line.replace(/\*(.*?)\*/g, '<em>$1</em>')
-      } else if (!inList) {
-        // Empty line outside list becomes a break
-        addBreak = true
-      }
-    }
-    
-    result.push(line)
-    if (addBreak && i < lines.length - 1) {
-      result.push('<br>')
-    }
+  console.log('formatMessage调用 - 内容长度:', content.length, '首100字符:', content.substring(0, 100))
+  try {
+    // Use marked.parse for better compatibility
+    const result = marked.parse(content)
+    console.log('Markdown解析成功 - HTML长度:', result.length, '首100字符:', result.substring(0, 100))
+    return result
+  } catch (error) {
+    console.error('Markdown解析失败:', error)
+    // Silently handle parsing errors during streaming (incomplete markdown)
+    // Just return the content with basic HTML escaping and line breaks
+    const escaped = String(content)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\n/g, '<br>')
+    return escaped
   }
-  
-  if (inList) result.push('</ul>')
-  
-  return result.join('')
 }
 
 async function loadSessions() { 
@@ -229,6 +252,10 @@ async function loadSessions() {
     sessions.value = data
     if (!currentSessionId.value && sessions.value.length > 0) {
       currentSessionId.value = sessions.value[0].id
+      // 同步第一个会话的模式
+      if (sessions.value[0].mode) {
+        mode.value = sessions.value[0].mode
+      }
       await loadMessages()
     }
   } catch (error) {
@@ -265,6 +292,11 @@ async function removeSession() {
 
 async function switchSession(id) {
   currentSessionId.value = id
+  // 同步会话的模式到下拉框
+  const session = sessions.value.find(s => s.id === id)
+  if (session && session.mode) {
+    mode.value = session.mode
+  }
   await loadMessages()
 }
 
@@ -273,6 +305,9 @@ async function loadMessages() {
   try {
     const { data } = await http.get(`/ai/sessions/${currentSessionId.value}/messages`)
     messages.value = data
+    // 加载完成后滚动到底部，显示最新消息
+    await nextTick()
+    scrollToBottom()
   } catch (error) {
     ElMessage.error('加载消息失败: ' + error.message)
   }
@@ -451,10 +486,24 @@ async function send(){
         appended = true  // Mark as appended to prevent fallback
       }
       
-      if (done) { 
+      if (done) {
+        console.log('流式传输完成（done=true）')
         pause()
         clearTimeout(fallbackTimer)
-        return 
+        
+        // 从服务器重新加载消息
+        nextTick(async () => {
+          console.log('流式传输完成，从服务器重新加载消息')
+          try {
+            await loadMessages()
+            scrollToBottom()
+          } catch (error) {
+            console.error('重新加载消息失败:', error)
+          }
+        })
+        
+        scrollToBottom()
+        return Promise.resolve()
       }
       
       buffer += decoder.decode(value, {stream: true})
@@ -462,35 +511,55 @@ async function send(){
       buffer = lines.pop() || ''
       
       for (const line of lines) {
+        // Spring SseEmitter sends "data:xxx" without space after colon
         if (line.startsWith('data:')) {
-          const data = line.slice(5).trim()
-          if (data === '[DONE]') {
-            pause()
-            clearTimeout(fallbackTimer)
-            return
+          // Don't trim! It removes newlines. Just remove the "data:" prefix
+          let data = line.substring(5)
+          // Only remove leading space if present (SSE standard has "data: " with space)
+          if (data.startsWith(' ')) {
+            data = data.substring(1)
           }
           
-          try {
-            const obj = JSON.parse(data)
-            if (obj && obj.error) {
-              ElMessage.error(obj.error)
-              pause()
-              clearTimeout(fallbackTimer)
-              return
-            }
+          // Debug: show received chunk
+          const displayData = data.replace(/\n/g, '\\n').replace(/\r/g, '\\r').replace(/ /g, '·')
+          console.log('收到数据块:', `"${displayData.substring(0, 60)}"`, '当前总长度:', messages.value[assistantIndex].content.length)
+          
+          if (data.trim() === '[DONE]') {
+            console.log('收到[DONE]标记，流式传输结束')
+            pause()
+            clearTimeout(fallbackTimer)
             
-            const chunk = obj?.delta?.content || obj?.message?.content || ''
-            if (chunk) {
-              messages.value[assistantIndex].content += chunk
-            }
-          } catch {
-            // Handle plain text chunks - this is likely what's happening with our streaming
-            messages.value[assistantIndex].content += data
+            // 从服务器重新加载消息，获取正确格式的内容
+            nextTick(async () => {
+              console.log('流式传输完成，从服务器重新加载消息')
+              try {
+                await loadMessages()
+                scrollToBottom()
+              } catch (error) {
+                console.error('重新加载消息失败:', error)
+              }
+            })
+            
+            scrollToBottom()
+            return Promise.resolve()
           }
+          
+          // Don't skip empty data - it might contain important whitespace/newlines
+          // The backend sends plain text chunks directly
+          // Just append the chunk to the content (preserving newlines)
+          const oldLength = messages.value[assistantIndex].content.length
+          messages.value[assistantIndex].content += data
+          const newLength = messages.value[assistantIndex].content.length
+          console.log('内容更新:', oldLength, '→', newLength, '增加:', data.length)
           scrollToBottom()
         }
       }
       return pump()
+    }).catch(err => {
+      console.error('流式读取错误:', err)
+      pause()
+      clearTimeout(fallbackTimer)
+      throw err
     })
     
     return pump()
@@ -571,12 +640,39 @@ function regenerate(index) {
 // Close context menu when clicking outside
 window.addEventListener('click', hideContextMenu)
 
+// 全局复制代码函数
+window.copyCode = function(button) {
+  const wrapper = button.closest('.code-block-wrapper')
+  const code = wrapper.querySelector('code')
+  const text = code.textContent || code.innerText
+  
+  navigator.clipboard.writeText(text).then(() => {
+    const span = button.querySelector('span')
+    const originalText = span.textContent
+    span.textContent = '已复制!'
+    button.style.background = '#52c41a'
+    button.style.color = '#fff'
+    button.style.borderColor = '#52c41a'
+    
+    setTimeout(() => {
+      span.textContent = originalText
+      button.style.background = ''
+      button.style.color = ''
+      button.style.borderColor = ''
+    }, 2000)
+  }).catch(err => {
+    console.error('复制失败:', err)
+    ElMessage.error('复制失败')
+  })
+}
+
 onMounted(() => {
   loadSessions()
 })
 </script>
 
 <style scoped>
+/* Scoped styles for main layout */
 .ai-root{display:flex;height:100%;position:relative;overflow:hidden}
 .ai-sidebar{width:280px;border-right:1px solid #eaecef;background:#fff;display:flex;flex-direction:column}
 .ai-main{flex:1;display:flex;flex-direction:column}
@@ -604,16 +700,29 @@ onMounted(() => {
 .msg-assistant{justify-content:flex-start}
 .msg-content{max-width:75%;padding:12px 16px;border-radius:12px;background:#fff;box-shadow:0 2px 4px rgba(0,0,0,0.1);border:1px solid #e0e0e0}
 .msg-user .msg-content{color:#333;border:none}
-.msg-text{line-height:1.6;word-wrap:break-word}
-.msg-text h1{font-size:1.5em;font-weight:600;margin:0.8em 0 0.4em 0;color:#333}
-.msg-text h2{font-size:1.3em;font-weight:600;margin:0.8em 0 0.4em 0;color:#333}
+.msg-text{line-height:1.6;word-wrap:break-word;overflow-wrap:break-word}
+.msg-text h1{font-size:1.5em;font-weight:600;margin:0.8em 0 0.4em 0;color:#333;border-bottom:2px solid #e0e0e0;padding-bottom:0.3em}
+.msg-text h2{font-size:1.3em;font-weight:600;margin:0.8em 0 0.4em 0;color:#333;border-bottom:1px solid #e8e8e8;padding-bottom:0.2em}
 .msg-text h3{font-size:1.1em;font-weight:600;margin:0.8em 0 0.3em 0;color:#333}
-.msg-text ul{margin:0.3em 0;padding-left:1.8em;list-style-type:disc}
-.msg-text li{margin:0.15em 0;line-height:1.5}
-.msg-text hr{border:none;border-top:1px solid #e0e0e0;margin:0.8em 0}
+.msg-text h4{font-size:1.05em;font-weight:600;margin:0.6em 0 0.3em 0;color:#333}
+.msg-text h5{font-size:1em;font-weight:600;margin:0.5em 0 0.2em 0;color:#333}
+.msg-text h6{font-size:0.95em;font-weight:600;margin:0.5em 0 0.2em 0;color:#666}
+.msg-text ul{margin:0.5em 0;padding-left:2em;list-style-type:disc}
+.msg-text ol{margin:0.5em 0;padding-left:2em;list-style-type:decimal}
+.msg-text li{margin:0.2em 0;line-height:1.6}
+.msg-text li > ul, .msg-text li > ol{margin:0.2em 0}
+.msg-text hr{border:none;border-top:1px solid #e0e0e0;margin:1em 0}
 .msg-text strong{font-weight:600;color:#333}
 .msg-text em{font-style:italic}
-.msg-text p{margin:0.3em 0}
+.msg-text p{margin:0.5em 0}
+.msg-text blockquote{border-left:4px solid #ddd;margin:0.5em 0;padding:0.5em 1em;background:#f9f9f9;color:#666}
+.msg-text code{background:#f5f5f5;padding:0.2em 0.4em;border-radius:3px;font-family:'Fira Code',Consolas,Monaco,'Courier New',monospace;font-size:0.9em;color:#e83e8c}
+.msg-text a{color:#1890ff;text-decoration:none}
+.msg-text a:hover{text-decoration:underline}
+.msg-text table{border-collapse:collapse;width:100%;margin:0.8em 0}
+.msg-text table th,.msg-text table td{border:1px solid #ddd;padding:0.5em;text-align:left}
+.msg-text table th{background:#f5f5f5;font-weight:600}
+.msg-text img{max-width:100%;height:auto;margin:0.5em 0}
 .msg-tools{margin-top:8px;display:flex;gap:6px;opacity:0;transition:opacity 0.2s}
 .msg-content:hover .msg-tools{opacity:1}
 .btn-white{background:#fff;border:1px solid #ddd;color:#333}
@@ -628,4 +737,85 @@ onMounted(() => {
 .context-menu-item{padding:8px 12px;cursor:pointer;font-size:14px;color:#333;transition:background-color 0.2s}
 .context-menu-item:hover{background:#f5f5f5}
 @keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+</style>
+
+<style>
+/* Global styles for code blocks (non-scoped for v-html content) */
+.msg-text .code-block-wrapper {
+  margin: 1em 0;
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border: 1px solid #e0e0e0;
+  background: #fff;
+}
+
+.msg-text .code-block-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.6em 1em;
+  background: linear-gradient(to bottom, #f8f9fa, #f0f1f2);
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.msg-text .code-block-lang {
+  font-size: 0.75em;
+  font-weight: 600;
+  color: #666;
+  text-transform: uppercase;
+  font-family: 'Fira Code', Consolas, Monaco, monospace;
+  letter-spacing: 0.5px;
+}
+
+.msg-text .code-block-copy {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.4em 0.8em;
+  background: #fff;
+  border: 1px solid #d0d0d0;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.75em;
+  color: #555;
+  transition: all 0.2s;
+  font-weight: 500;
+}
+
+.msg-text .code-block-copy:hover {
+  background: #f0f0f0;
+  border-color: #999;
+  color: #333;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.msg-text .code-block-copy:active {
+  transform: translateY(0);
+  box-shadow: none;
+}
+
+.msg-text .code-block-copy svg {
+  width: 14px;
+  height: 14px;
+}
+
+.msg-text .code-block-wrapper pre {
+  background: #282c34;
+  color: #abb2bf;
+  padding: 1.2em;
+  margin: 0;
+  overflow-x: auto;
+}
+
+.msg-text .code-block-wrapper pre code {
+  background: transparent;
+  padding: 0;
+  color: inherit;
+  font-size: 0.9em;
+  line-height: 1.6;
+  display: block;
+  font-family: 'Fira Code', Consolas, Monaco, 'Courier New', monospace;
+}
 </style>
