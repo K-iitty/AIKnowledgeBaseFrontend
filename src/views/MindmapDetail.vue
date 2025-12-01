@@ -32,8 +32,9 @@ const route = useRoute()
 const id = route.params.id
 const map = ref({})
 async function load(){
-  const { data } = await http.get('/mindmaps/list')
-  map.value = data.find(x=>String(x.id)===String(id)) || {}
+  // 直接获取思维导图详情，会自动增加浏览量
+  const { data } = await http.get(`/mindmaps/${id}`)
+  map.value = data
 }
 load()
 async function save(){

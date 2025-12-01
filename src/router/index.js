@@ -19,6 +19,39 @@ const routes = [
   { path: '/login', component: Login },
   { path: '/register', component: Register },
   {
+    path: '/admin',
+    component: () => import('../views/admin/AdminLayout.vue'),
+    meta: { requiresAdmin: true },
+    redirect: '/admin/dashboard',
+    children: [
+      {
+        path: 'dashboard',
+        component: () => import('../views/admin/AdminDashboard.vue'),
+        meta: { title: '数据统计', requiresAdmin: true }
+      },
+      {
+        path: 'users',
+        component: () => import('../views/admin/UserManagement.vue'),
+        meta: { title: '用户管理', requiresAdmin: true }
+      },
+      {
+        path: 'notes',
+        component: () => import('../views/admin/NoteManagement.vue'),
+        meta: { title: '笔记管理', requiresAdmin: true }
+      },
+      {
+        path: 'mindmaps',
+        component: () => import('../views/admin/MindmapManagement.vue'),
+        meta: { title: '思维导图管理', requiresAdmin: true }
+      },
+      {
+        path: 'links',
+        component: () => import('../views/admin/LinkManagement.vue'),
+        meta: { title: '链接管理', requiresAdmin: true }
+      }
+    ]
+  },
+  {
     path: '/',
     component: MainLayout,
     children: [
@@ -58,10 +91,34 @@ const routes = [
 const router = createRouter({ history: createWebHistory(), routes })
 
 router.beforeEach((to, from, next) => {
+  console.log('路由导航:', from.path, '->', to.path)
+  
+  // 避免无限循环：如果已经在登录页，不要再重定向到登录页
+  if (to.path === '/login' && from.path === '/login') {
+    console.log('已在登录页，跳过重定向')
+    return next()
+  }
+  
+  // 管理后台路由检查
+  if (to.meta.requiresAdmin) {
+    const adminToken = localStorage.getItem('admin_token')
+    console.log('管理后台路由检查，token:', adminToken ? '存在' : '不存在')
+    if (!adminToken) {
+      console.log('未登录，跳转到登录页')
+      return next('/login')
+    }
+  }
+  
+  // 普通用户路由检查
   if (to.meta.requiresAuth) {
     const token = localStorage.getItem('token')
-    if (!token) return next('/login')
+    if (!token) {
+      console.log('用户未登录，跳转到登录页')
+      return next('/login')
+    }
   }
+  
+  console.log('路由检查通过，允许导航')
   next()
 })
 

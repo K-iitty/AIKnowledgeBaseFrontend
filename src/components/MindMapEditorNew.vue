@@ -150,20 +150,22 @@ const initJsMind = () => {
     const options = {
       container: mindmapContainer.value,
       editable: true,
-      theme: 'primary',
-      mode: 'side',
+      theme: null, // 不使用预设主题，使用自定义样式
+      mode: 'full',
       support_html: true,
       view: {
         hmargin: 100,
         vmargin: 50,
         line_width: 1.5,
-        line_color: '#d0d0d0',
-        line_style: 'curved'
+        line_color: '#3370ff',
+        engine: 'canvas',
+        draggable: true,
+        hide_scrollbars_when_draggable: true
       },
       layout: {
-        hspace: 40,
-        vspace: 25,
-        pspace: 13
+        hspace: 60,
+        vspace: 20,
+        pspace: 10
       },
       shortcut: {
         enable: false
@@ -770,7 +772,7 @@ onUnmounted(() => {
 .mindmap-container {
   width: 100%;
   height: 100%;
-  background-color: #f5f5f5;
+  background-color: #ffffff;
   overflow: hidden;
   position: relative;
 }
@@ -799,51 +801,83 @@ onUnmounted(() => {
   box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
 }
 
-/* 自定义jsMind节点样式 - 简约风格 */
+/* 自定义jsMind节点样式 - 简洁技术文档风格 */
 .mindmap-container :deep(jmnode) {
+  background: transparent !important;
   background-color: transparent !important;
   background-image: none !important;
-  border: 1.5px solid #e0e0e0 !important;
-  border-radius: 6px !important;
-  padding: 8px 16px !important;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08) !important;
+  border: none !important;
+  border-radius: 0 !important;
+  padding: 6px 12px !important;
+  box-shadow: none !important;
   transition: all 0.2s ease !important;
+  color: #333333 !important;
+  font-weight: 400 !important;
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+  min-width: 60px !important;
+  text-align: left !important;
 }
 
 .mindmap-container :deep(jmnode:hover) {
-  border-color: #b0b0b0 !important;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12) !important;
+  background: rgba(51, 112, 255, 0.05) !important;
 }
 
-/* 根节点特殊样式 */
+/* 根节点特殊样式 - 蓝色填充，有边框 */
 .mindmap-container :deep(jmnode.root) {
-  border: 2px solid #42b983 !important;
+  background: #3370ff !important;
+  background-color: #3370ff !important;
+  background-image: none !important;
+  border: 2px solid #3370ff !important;
   border-radius: 8px !important;
   padding: 10px 20px !important;
   font-weight: 600 !important;
   font-size: 16px !important;
-  box-shadow: 0 2px 8px rgba(66, 185, 131, 0.15) !important;
+  box-shadow: 0 3px 6px rgba(51, 112, 255, 0.3) !important;
+  color: #ffffff !important;
+  min-width: 80px !important;
 }
 
 /* 选中节点样式 */
 .mindmap-container :deep(jmnode.selected) {
-  border-color: #409eff !important;
-  box-shadow: 0 2px 8px rgba(64, 158, 255, 0.25) !important;
+  background: #e6eeff !important;
+  background-color: #e6eeff !important;
+  background-image: none !important;
+  border: 2px solid #1e4fc2 !important;
+  border-radius: 6px !important;
+  box-shadow: 0 3px 8px rgba(30, 79, 194, 0.3) !important;
 }
 
-/* 连接线样式 - 柔和的圆弧 */
+/* 连接线样式 - 蓝色直角连接 */
 .mindmap-container :deep(canvas) {
-  opacity: 0.6;
+  opacity: 1;
 }
 
-/* 节点文本样式 */
-.mindmap-container :deep(jmnode) {
+/* 第一层子节点 - 白色背景，蓝色边框 */
+.mindmap-container :deep(jmnode[data-depth="1"]) {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  border: 2px solid #3370ff !important;
+  border-radius: 6px !important;
+  padding: 8px 16px !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
   color: #333333 !important;
-  font-size: 14px !important;
-  line-height: 1.5 !important;
 }
 
-.mindmap-container :deep(jmnode.root) {
-  color: #42b983 !important;
+/* 第二层及更深层级节点 - 无边框，只显示文字 */
+.mindmap-container :deep(jmnode[data-depth="2"]),
+.mindmap-container :deep(jmnode[data-depth="3"]),
+.mindmap-container :deep(jmnode[data-depth="4"]),
+.mindmap-container :deep(jmnode[data-depth="5"]),
+.mindmap-container :deep(jmnode[data-depth="6"]) {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border: none !important;
+  border-radius: 0 !important;
+  padding: 4px 8px !important;
+  box-shadow: none !important;
+  color: #333333 !important;
 }
 </style>

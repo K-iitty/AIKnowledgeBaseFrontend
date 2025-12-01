@@ -15,3 +15,90 @@ body{margin:0;background:#ffffff;color:#333}
 .el-sub-menu__title{color:#333 !important}
 .el-sub-menu__title.is-active{color:#333 !important;background:#ecf5ff !important}
 .el-sub-menu__title:hover{color:#333 !important;background:#f6f8fa !important}
+
+/* jsMind 思维导图全局样式覆盖 - 简洁技术文档风格 */
+jmnode {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border: none !important;
+  border-radius: 0 !important;
+  padding: 6px 12px !important;
+  box-shadow: none !important;
+  transition: all 0.2s ease !important;
+  color: #333333 !important;
+  font-weight: 400 !important;
+  font-size: 14px !important;
+  line-height: 1.5 !important;
+  min-width: 60px !important;
+  text-align: left !important;
+}
+
+jmnode:hover {
+  background: rgba(51, 112, 255, 0.05) !important;
+}
+
+/* 根节点 - 蓝色填充，有边框 */
+jmnode.root {
+  background: #3370ff !important;
+  background-color: #3370ff !important;
+  background-image: none !important;
+  border: 2px solid #3370ff !important;
+  border-radius: 8px !important;
+  padding: 10px 20px !important;
+  font-weight: 600 !important;
+  font-size: 16px !important;
+  box-shadow: 0 3px 6px rgba(51, 112, 255, 0.3) !important;
+  color: #ffffff !important;
+  min-width: 80px !important;
+}
+
+/* 选中节点 */
+jmnode.selected {
+  background: #e6eeff !important;
+  background-color: #e6eeff !important;
+  background-image: none !important;
+  border: 2px solid #1e4fc2 !important;
+  border-radius: 6px !important;
+  box-shadow: 0 3px 8px rgba(30, 79, 194, 0.3) !important;
+}
+
+/* 第一层子节点 - 白色背景，蓝色边框 */
+jmnode[data-depth="1"] {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+  border: 2px solid #3370ff !important;
+  border-radius: 6px !important;
+  padding: 8px 16px !important;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1) !important;
+  color: #333333 !important;
+}
+
+/* 第二层及更深层级节点 - 无边框，只显示文字 */
+jmnode[data-depth="2"],
+jmnode[data-depth="3"],
+jmnode[data-depth="4"],
+jmnode[data-depth="5"],
+jmnode[data-depth="6"] {
+  background: transparent !important;
+  background-color: transparent !important;
+  background-image: none !important;
+  border: none !important;
+  border-radius: 0 !important;
+  padding: 4px 8px !important;
+  box-shadow: none !important;
+  color: #333333 !important;
+}
+
+/* 连接线样式 - 蓝色直线 */
+#jsmind_container canvas {
+  opacity: 1 !important;
+}
+
+/* 思维导图容器背景 - 纯白 */
+.mindmap-container {
+  background: #ffffff !important;
+  background-color: #ffffff !important;
+  background-image: none !important;
+}

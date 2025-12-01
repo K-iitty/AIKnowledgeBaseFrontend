@@ -212,52 +212,15 @@
             <!-- 编辑模式 -->
             <template v-else-if="isEditing">
               <div class="edit-mode">
-                <div class="editor-container">
-                <div class="editor-toolbar">
-                  <el-tabs v-model="activeTab" class="editor-tabs">
-                    <el-tab-pane label="编辑" name="edit"></el-tab-pane>
-                    <el-tab-pane label="预览" name="preview"></el-tab-pane>
-                  </el-tabs>
-                </div>
-                
-                <div class="editor-content">
-                  <div v-show="activeTab === 'edit'" class="editor-pane">
-                    <el-input
-                      ref="editTextarea"
-                      v-model="editingContent"
-                      type="textarea"
-                      placeholder="请输入 Markdown 内容，支持图片上传"
-                      class="editor-textarea"
-                    />
-                    <div class="image-upload-area">
-                      <el-upload
-                        :auto-upload="false"
-                        :on-change="onEditImageChange"
-                        :show-file-list="false"
-                        accept="image/*"
-                        class="image-upload"
-                      >
-                        <el-button size="small" type="primary">
-                          <el-icon><Plus /></el-icon>
-                          上传图片
-                        </el-button>
-                      </el-upload>
-                      <div class="upload-tip">
-                        图片将自动上传到云端，插入到光标位置
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div v-show="activeTab === 'preview'" class="preview-pane">
-                    <div class="preview-content" v-html="marked(editingContent || '')"></div>
-                  </div>
-                </div>
-                
-                <div class="editor-actions">
-                  <el-button type="success" size="small" @click="saveContent">保存</el-button>
-                  <el-button size="small" @click="cancelEdit">取消</el-button>
-                </div>
-                </div>
+                <TiptapEditor 
+                  ref="editEditorRef"
+                  v-model="editingContent"
+                  placeholder="开始编写笔记... 支持 Markdown 快捷语法"
+                  :show-actions="true"
+                  @save="saveContent"
+                  @cancel="cancelEdit"
+                  style="height: 100%;"
+                />
               </div>
             </template>
           </div>
@@ -291,53 +254,15 @@
               </el-form>
             </div>
             
-            <div class="editor-container">
-              <div class="editor-toolbar">
-                <el-tabs v-model="activeTab" class="editor-tabs">
-                  <el-tab-pane label="编辑" name="edit"></el-tab-pane>
-                  <el-tab-pane label="预览" name="preview"></el-tab-pane>
-                </el-tabs>
-              </div>
-          
-              <div class="editor-content">
-                <div v-show="activeTab === 'edit'" class="editor-pane">
-                  <el-input
-                    ref="newNoteTextarea"
-                    v-model="newNoteForm.content"
-                    type="textarea"
-                    placeholder="请输入 Markdown 内容，支持图片上传"
-                    class="editor-textarea"
-                  />
-                  <div class="image-upload-area">
-                    <el-upload
-                      :auto-upload="false"
-                      :on-change="onImageChange"
-                      :show-file-list="false"
-                      accept="image/*"
-                      class="image-upload"
-                    >
-                      <el-button size="small" type="primary">
-                        <el-icon><Plus /></el-icon>
-                        上传图片
-                      </el-button>
-                    </el-upload>
-                    <div class="upload-tip">
-                      图片将自动上传到云端，插入到光标位置
-                    </div>
-                  </div>
-                </div>
-            
-                <div v-show="activeTab === 'preview'" class="preview-pane">
-                  <div class="preview-content" v-html="previewContent"></div>
-                </div>
-              </div>
-              
-              <!-- 添加保存和取消按钮到编辑器底部 -->
-              <div class="editor-actions" style="text-align: center; padding: 20px 0;">
-                <el-button type="success" size="small" @click="saveNewNote">保存</el-button>
-                <el-button size="small" @click="cancelCreate">取消</el-button>
-              </div>
-            </div>
+            <TiptapEditor 
+              ref="createEditorRef"
+              v-model="newNoteForm.content"
+              placeholder="开始编写笔记... 支持 Markdown 快捷语法"
+              :show-actions="true"
+              @save="saveNewNote"
+              @cancel="cancelCreate"
+              style="height: calc(100vh - 350px);"
+            />
           </div>
           
           <!-- 创建新思维导图的表单 -->
@@ -438,7 +363,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import { marked } from 'marked'
 import http from '@/api/http'
-import MindMapEditor from '@/components/MindMapEditorNew.vue'
+import MindMapEditor from '@/components/MindMapEditorSimple.vue'
+import TiptapEditor from '@/components/TiptapEditor.vue'
+// import MindMapEditor from '@/components/MindMapEditorNew.vue'
 // import MindMapEditor from '@/components/MindMapEditor.vue'
 import {
   ArrowLeft,
@@ -499,6 +426,10 @@ const loading = ref(false) // 添加加载状态
 // Refs for textareas
 const editTextarea = ref(null)
 const newNoteTextarea = ref(null)
+
+// Refs for Tiptap editors
+const editEditorRef = ref(null)
+const createEditorRef = ref(null)
 
 // Form
 const itemForm = ref({
@@ -642,20 +573,73 @@ const loadCategory = async () => {
 
 const selectItem = async (item) => {
   if (sidebarMode.value === 'outline') {
-    const el = document.getElementById(item.id)
+    // 尝试通过 ID 查找元素
+    let el = document.getElementById(item.id)
+    
+    // 如果通过 ID 找不到（编辑模式），尝试通过文本内容查找
+    if (!el) {
+      // 在编辑模式下，查找 Tiptap 编辑器内的标题
+      const editorContent = document.querySelector('.ProseMirror')
+      if (editorContent) {
+        // 查找所有标题元素
+        const headings = editorContent.querySelectorAll('h1, h2, h3, h4, h5, h6')
+        // 找到匹配文本的标题
+        el = Array.from(headings).find(h => h.textContent.trim() === item.text.trim())
+      }
+      
+      // 如果还是找不到，尝试在只读内容中查找
+      if (!el) {
+        const readonlyContent = document.querySelector('.readonly-content')
+        if (readonlyContent) {
+          const headings = readonlyContent.querySelectorAll('h1, h2, h3, h4, h5, h6')
+          el = Array.from(headings).find(h => h.textContent.trim() === item.text.trim())
+        }
+      }
+    }
     
     if (el) {
-      // Use scrollIntoView with offset
-      // First, scroll the element into view
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      // 查找滚动容器（按优先级查找）
+      // 预览模式：.readonly-content 是真正的滚动容器
+      let scrollableParent = el.closest('.readonly-content')
+      if (!scrollableParent) {
+        // 编辑模式：.editor-content 或 .edit-mode
+        scrollableParent = el.closest('.editor-content, .edit-mode')
+      }
+      if (!scrollableParent) {
+        // 其他容器
+        scrollableParent = el.closest('.content-body, .main-content, .content-display-area')
+      }
       
-      // Then adjust for header offset
-      setTimeout(() => {
-        const scrollableParent = el.closest('.content-body, .main-content, .content-display-area')
-        if (scrollableParent && scrollableParent.scrollTop > 80) {
-          scrollableParent.scrollTop -= 80
-        }
-      }, 100)
+      if (scrollableParent) {
+        // 计算元素相对于滚动容器的位置
+        const containerRect = scrollableParent.getBoundingClientRect()
+        const elementRect = el.getBoundingClientRect()
+        const relativeTop = elementRect.top - containerRect.top + scrollableParent.scrollTop
+        const targetScrollTop = relativeTop - 100
+        
+        console.log('大纲跳转:', {
+          container: scrollableParent.className,
+          elementText: item.text,
+          relativeTop,
+          targetScrollTop,
+          scrollTop: scrollableParent.scrollTop
+        })
+        
+        // 使用平滑滚动
+        scrollableParent.scrollTo({
+          top: targetScrollTop,
+          behavior: 'smooth'
+        })
+      } else {
+        // 如果找不到滚动容器，使用默认滚动
+        console.log('未找到滚动容器，使用默认滚动')
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      }
+      
+      // 高亮显示选中的标题
+      activeOutlineId.value = item.id
+    } else {
+      console.warn('未找到标题元素:', item.text)
     }
     return
   }
@@ -868,17 +852,22 @@ const toggleOutlineCollapse = (item, event) => {
 const loadMindmapData = async (mindmap) => {
   try {
     mindmapData.value = null
+    
+    // 调用详情接口，会自动增加浏览量并保存到数据库
+    const { data } = await http.get(`/mindmaps/${mindmap.id}`)
+    
+    // 更新选中项的数据（包含最新的浏览量）
+    Object.assign(mindmap, data)
+    
     // For mindmaps, we might want to show a preview or just metadata
     // The actual file would be downloaded
     mindmapData.value = {
-      title: mindmap.title,
-      description: mindmap.description,
-      format: mindmap.format,
-      nodeCount: mindmap.nodeCount
+      title: data.title,
+      description: data.description,
+      format: data.format,
+      nodeCount: data.nodeCount,
+      views: data.views
     }
-    
-    // Update view count
-    mindmap.views = (mindmap.views || 0) + 1
   } catch (error) {
     ElMessage.error('加载思维导图数据失败')
   }
@@ -909,7 +898,17 @@ const editItem = () => {
 const startEditing = () => {
   isEditing.value = true
   activeTab.value = 'edit'
-  editingContent.value = noteRaw.value || ''
+  
+  // 将 Markdown 转换为 HTML 供 Tiptap 使用
+  const rawContent = noteRaw.value || ''
+  
+  // 如果内容看起来像 Markdown（包含 #、**、- 等），转换为 HTML
+  if (rawContent.includes('#') || rawContent.includes('**') || rawContent.includes('- ')) {
+    editingContent.value = marked(rawContent)
+  } else {
+    // 否则直接使用（可能已经是 HTML）
+    editingContent.value = rawContent
+  }
 }
 
 const refreshContent = () => {
@@ -923,28 +922,54 @@ const refreshContent = () => {
 
 const saveContent = async () => {
   try {
+    // 显示加载状态
+    const loadingMsg = ElMessage({
+      message: '正在保存...',
+      type: 'info',
+      duration: 0
+    })
+    
+    // 从 Tiptap 编辑器获取 Markdown 格式内容
+    let contentToSave = editingContent.value
+    if (editEditorRef.value && editEditorRef.value.getMarkdown) {
+      // 使用 Markdown 格式保存，保持兼容性
+      contentToSave = editEditorRef.value.getMarkdown()
+    }
+    
     const data = {
       title: selectedItem.value.title,
       description: selectedItem.value.description,
-      content: editingContent.value,
+      content: contentToSave,
       tags: selectedItem.value.tags,
       coverKey: selectedItem.value.coverKey,
       visibility: selectedItem.value.visibility
     }
     
     await http.put(`/notes/${selectedItem.value.id}`, data)
+    
+    // 关闭加载提示
+    loadingMsg.close()
     ElMessage.success('保存成功')
     
-    // 更新显示内容
-    noteRaw.value = editingContent.value
-    noteContent.value = marked(editingContent.value)
+    // 静态更新显示内容（不重新加载）
+    noteRaw.value = contentToSave
+    noteContent.value = marked(contentToSave)
+    selectedItem.value.content = contentToSave
+    
+    // 更新列表中的对应项（静态更新，不重新加载）
+    const itemInList = items.value.find(item => item.id === selectedItem.value.id)
+    if (itemInList) {
+      itemInList.content = contentToSave
+      itemInList.title = selectedItem.value.title
+    }
     
     // 退出编辑模式
     isEditing.value = false
     
-    // 重新加载列表以更新信息
-    await loadItems()
+    // ❌ 不要重新加载列表，会导致卡顿
+    // await loadItems()
   } catch (error) {
+    console.error('保存失败:', error)
     ElMessage.error('保存失败')
   }
 }
@@ -958,18 +983,258 @@ const downloadItem = async () => {
   if (!selectedItem.value) return
   
   try {
-    const endpoint = props.contentType === 'notes' 
-      ? `/notes/${selectedItem.value.id}/download` 
-      : `/mindmaps/${selectedItem.value.id}/download`
+    if (props.contentType === 'notes') {
+      // 先从详情接口获取完整的笔记信息（包含 format 字段）
+      let noteFormat = selectedItem.value.format
+      
+      // 如果列表数据中没有 format 字段，从详情接口获取
+      if (!noteFormat) {
+        try {
+          const detailResponse = await http.get(`/notes/${selectedItem.value.id}`)
+          noteFormat = detailResponse.data.format || 'md'
+          console.log('从详情接口获取 format:', noteFormat)
+        } catch (error) {
+          console.error('获取笔记详情失败:', error)
+          noteFormat = 'md'
+        }
+      }
+      
+      console.log('笔记格式:', noteFormat, '笔记标题:', selectedItem.value.title)
+      
+      // 如果是 PDF 或其他非 Markdown 格式，直接从后端下载
+      if (noteFormat !== 'md' && noteFormat !== 'markdown') {
+        console.log('检测到非 Markdown 格式，直接下载原始文件')
+        const endpoint = `/notes/${selectedItem.value.id}/download`
+        const response = await http.get(endpoint, { responseType: 'blob' })
+        
+        const url = window.URL.createObjectURL(new Blob([response.data]))
+        const link = document.createElement('a')
+        link.href = url
+        link.setAttribute('download', `${selectedItem.value.title}.${noteFormat}`)
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        window.URL.revokeObjectURL(url)
+        
+        ElMessage.success('下载成功')
+        return
+      }
+      
+      console.log('检测到 Markdown 格式，转换并打包')
+      
+      // Markdown 笔记：转换为 Markdown 格式并打包图片
+      let content = selectedItem.value.content || ''
+      const images = []
+      
+      // 如果内容是 HTML 格式（包含 HTML 标签），转换为 Markdown
+      if (content.includes('<') && content.includes('>')) {
+        // 提取图片 URL
+        const imgRegex = /<img[^>]+src="([^"]+)"[^>]*>/g
+        let match
+        while ((match = imgRegex.exec(content)) !== null) {
+          const src = match[1]
+          // 只处理 http/https 图片
+          if (src.startsWith('http://') || src.startsWith('https://')) {
+            images.push(src)
+          }
+        }
+        
+        // 转换为 Markdown，并替换图片路径
+        content = htmlToMarkdownWithImages(content, images)
+      }
+      
+      // 如果有图片，创建 ZIP 包
+      if (images.length > 0) {
+        await downloadWithImages(selectedItem.value.title, content, images)
+      } else {
+        // 没有图片，直接下载 Markdown
+        const blob = new Blob([content], { type: 'text/markdown;charset=utf-8' })
+        const url = window.URL.createObjectURL(blob)
+        const link = document.createElement('a')
+        link.href = url
+        link.setAttribute('download', `${selectedItem.value.title}.md`)
+        document.body.appendChild(link)
+        link.click()
+        link.remove()
+        window.URL.revokeObjectURL(url)
+        
+        ElMessage.success('下载成功')
+      }
+    } else {
+      // 思维导图下载：使用原有逻辑
+      const endpoint = `/mindmaps/${selectedItem.value.id}/download`
+      const response = await http.get(endpoint, { responseType: 'blob' })
+      
+      const url = window.URL.createObjectURL(new Blob([response.data]))
+      const link = document.createElement('a')
+      const fileExtension = selectedItem.value.format || 'xmind'
+      link.href = url
+      link.setAttribute('download', `${selectedItem.value.title}.${fileExtension}`)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+      
+      ElMessage.success('下载成功')
+    }
+  } catch (error) {
+    console.error('下载失败:', error)
+    ElMessage.error('下载失败: ' + (error.message || '未知错误'))
+  }
+}
+
+// HTML 转 Markdown 函数（带图片路径替换）
+const htmlToMarkdownWithImages = (html, images) => {
+  let markdown = html
+  let imageIndex = 0
+  
+  // 处理图片
+  markdown = markdown.replace(/<img[^>]+src="([^"]+)"[^>]*alt="([^"]*)"[^>]*>/g, (match, src, alt) => {
+    // 如果是 Base64 图片，移除
+    if (src.startsWith('data:image')) {
+      return '![图片](图片已移除，请重新上传)'
+    }
+    // 如果是 URL 图片，替换为相对路径
+    if (src.startsWith('http://') || src.startsWith('https://')) {
+      const ext = src.split('.').pop().split('?')[0] || 'png'
+      const filename = `image_${imageIndex++}.${ext}`
+      return `![${alt || '图片'}](img/${filename})`
+    }
+    return `![${alt || '图片'}](${src})`
+  })
+  
+  // 处理没有 alt 属性的图片
+  markdown = markdown.replace(/<img[^>]+src="([^"]+)"[^>]*>/g, (match, src) => {
+    // 如果是 Base64 图片，移除
+    if (src.startsWith('data:image')) {
+      return '![图片](图片已移除，请重新上传)'
+    }
+    // 如果是 URL 图片，替换为相对路径
+    if (src.startsWith('http://') || src.startsWith('https://')) {
+      const ext = src.split('.').pop().split('?')[0] || 'png'
+      const filename = `image_${imageIndex++}.${ext}`
+      return `![图片](img/${filename})`
+    }
+    return `![图片](${src})`
+  })
+  
+  // 继续处理其他 HTML 标签...
+  
+  // 标题
+  markdown = markdown.replace(/<h1[^>]*>(.*?)<\/h1>/g, '# $1\n\n')
+  markdown = markdown.replace(/<h2[^>]*>(.*?)<\/h2>/g, '## $1\n\n')
+  markdown = markdown.replace(/<h3[^>]*>(.*?)<\/h3>/g, '### $1\n\n')
+  markdown = markdown.replace(/<h4[^>]*>(.*?)<\/h4>/g, '#### $1\n\n')
+  markdown = markdown.replace(/<h5[^>]*>(.*?)<\/h5>/g, '##### $1\n\n')
+  markdown = markdown.replace(/<h6[^>]*>(.*?)<\/h6>/g, '###### $1\n\n')
+  
+  // 粗体和斜体
+  markdown = markdown.replace(/<strong[^>]*>(.*?)<\/strong>/g, '**$1**')
+  markdown = markdown.replace(/<b[^>]*>(.*?)<\/b>/g, '**$1**')
+  markdown = markdown.replace(/<em[^>]*>(.*?)<\/em>/g, '*$1*')
+  markdown = markdown.replace(/<i[^>]*>(.*?)<\/i>/g, '*$1*')
+  markdown = markdown.replace(/<u[^>]*>(.*?)<\/u>/g, '$1')
+  markdown = markdown.replace(/<s[^>]*>(.*?)<\/s>/g, '~~$1~~')
+  
+  // 代码
+  markdown = markdown.replace(/<code[^>]*>(.*?)<\/code>/g, '`$1`')
+  markdown = markdown.replace(/<pre[^>]*><code[^>]*>(.*?)<\/code><\/pre>/gs, '\n```\n$1\n```\n\n')
+  
+  // 列表
+  markdown = markdown.replace(/<li[^>]*>(.*?)<\/li>/g, '- $1\n')
+  markdown = markdown.replace(/<ul[^>]*>(.*?)<\/ul>/gs, '\n$1\n')
+  markdown = markdown.replace(/<ol[^>]*>(.*?)<\/ol>/gs, '\n$1\n')
+  
+  // 引用
+  markdown = markdown.replace(/<blockquote[^>]*>(.*?)<\/blockquote>/gs, '\n> $1\n\n')
+  
+  // 段落
+  markdown = markdown.replace(/<p[^>]*>(.*?)<\/p>/g, '$1\n\n')
+  
+  // 分隔线
+  markdown = markdown.replace(/<hr[^>]*>/g, '\n---\n\n')
+  
+  // 链接
+  markdown = markdown.replace(/<a[^>]+href="([^"]*)"[^>]*>(.*?)<\/a>/g, '[$2]($1)')
+  
+  // 换行
+  markdown = markdown.replace(/<br\s*\/?>/g, '\n')
+  
+  // 移除其他 HTML 标签
+  markdown = markdown.replace(/<[^>]+>/g, '')
+  
+  // 解码 HTML 实体
+  markdown = markdown.replace(/&nbsp;/g, ' ')
+  markdown = markdown.replace(/&lt;/g, '<')
+  markdown = markdown.replace(/&gt;/g, '>')
+  markdown = markdown.replace(/&amp;/g, '&')
+  markdown = markdown.replace(/&quot;/g, '"')
+  
+  // 清理多余空行
+  markdown = markdown.replace(/\n{3,}/g, '\n\n')
+  
+  return markdown.trim()
+}
+
+// 下载带图片的 Markdown（创建 ZIP 包）
+const downloadWithImages = async (title, markdownContent, imageUrls) => {
+  try {
+    // 动态导入 JSZip
+    const JSZip = (await import('jszip')).default
+    const zip = new JSZip()
     
-    const response = await http.get(endpoint, { responseType: 'blob' })
+    // 添加 Markdown 文件
+    zip.file(`${title}.md`, markdownContent)
     
-    // Create download link
-    const url = window.URL.createObjectURL(new Blob([response.data]))
+    // 创建 img 文件夹
+    const imgFolder = zip.folder('img')
+    
+    // 下载并添加图片
+    const loadingMsg = ElMessage({
+      message: `正在下载图片... (0/${imageUrls.length})`,
+      type: 'info',
+      duration: 0
+    })
+    
+    for (let i = 0; i < imageUrls.length; i++) {
+      try {
+        const imageUrl = imageUrls[i]
+        const ext = imageUrl.split('.').pop().split('?')[0] || 'png'
+        const filename = `image_${i}.${ext}`
+        
+        // 更新进度
+        loadingMsg.message = `正在下载图片... (${i + 1}/${imageUrls.length})`
+        
+        // 下载图片
+        const response = await fetch(imageUrl)
+        const blob = await response.blob()
+        
+        // 添加到 ZIP
+        imgFolder.file(filename, blob)
+      } catch (error) {
+        console.error(`下载图片失败: ${imageUrls[i]}`, error)
+        // 继续下载其他图片
+      }
+    }
+    
+    loadingMsg.close()
+    
+    // 生成 ZIP 文件
+    const loadingZipMsg = ElMessage({
+      message: '正在生成压缩包...',
+      type: 'info',
+      duration: 0
+    })
+    
+    const zipBlob = await zip.generateAsync({ type: 'blob' })
+    
+    loadingZipMsg.close()
+    
+    // 下载 ZIP 文件
+    const url = window.URL.createObjectURL(zipBlob)
     const link = document.createElement('a')
-    const fileExtension = selectedItem.value.format || (props.contentType === 'notes' ? 'md' : 'xmind')
     link.href = url
-    link.setAttribute('download', `${selectedItem.value.title}.${fileExtension}`)
+    link.setAttribute('download', `${title}.zip`)
     document.body.appendChild(link)
     link.click()
     link.remove()
@@ -977,6 +1242,7 @@ const downloadItem = async () => {
     
     ElMessage.success('下载成功')
   } catch (error) {
+    console.error('创建 ZIP 失败:', error)
     ElMessage.error('下载失败: ' + (error.message || '未知错误'))
   }
 }
@@ -1201,33 +1467,53 @@ const saveNewNote = async () => {
   }
   
   try {
+    // 显示加载状态
+    const loadingMsg = ElMessage({
+      message: '正在创建笔记...',
+      type: 'info',
+      duration: 0
+    })
+    
+    // 从 Tiptap 编辑器获取 Markdown 格式内容
+    let contentToSave = newNoteForm.value.content
+    if (createEditorRef.value && createEditorRef.value.getMarkdown) {
+      // 使用 Markdown 格式保存，保持兼容性
+      contentToSave = createEditorRef.value.getMarkdown()
+    }
+    
     // 创建新笔记
     const data = {
       title: newNoteForm.value.title,
       description: newNoteForm.value.description,
-      content: newNoteForm.value.content,
+      content: contentToSave,
       visibility: newNoteForm.value.visibility,
       categoryId: props.categoryId,
       coverKey: newNoteForm.value.coverKey
     }
     
     const response = await http.post('/notes', data)
+    
+    // 关闭加载提示
+    loadingMsg.close()
     ElMessage.success('笔记创建成功')
     
     // 退出创建模式
     isCreating.value = false
     
-    // 重新加载列表
-    await loadItems()
+    // 静态添加到列表（不重新加载）
+    const newItem = {
+      ...response.data,
+      type: 'note'
+    }
+    items.value.unshift(newItem)
     
     // 选中新创建的笔记
-    const createdItem = items.value.find(item => item.id === response.data.id)
-    if (createdItem) {
-      selectItem(createdItem)
-    } else if (items.value.length > 0) {
-      selectItem(items.value[0])
-    }
+    selectItem(newItem)
+    
+    // ❌ 不要重新加载列表，会导致卡顿
+    // await loadItems()
   } catch (error) {
+    console.error('创建笔记失败:', error)
     ElMessage.error('保存失败: ' + (error.message || '未知错误'))
   }
 }
@@ -1452,6 +1738,42 @@ async function handleMindmapImport(options) {
   } catch (error) {
     console.error('导入失败:', error)
     ElMessage.error('导入失败: ' + (error.message || '未知错误'))
+  }
+}
+
+// 保存思维导图
+const saveMindmap = async (mindmapData) => {
+  try {
+    if (!selectedItem.value || !selectedItem.value.id) {
+      ElMessage.error('未选中思维导图')
+      return
+    }
+    
+    const data = {
+      title: mindmapData.title,
+      content: mindmapData.content,
+      categoryId: selectedItem.value.categoryId || props.categoryId
+    }
+    
+    await http.put(`/mindmaps/${selectedItem.value.id}`, data)
+    ElMessage.success('保存成功')
+    
+    // 更新本地数据（静态更新，不触发重新渲染）
+    selectedItem.value.title = mindmapData.title
+    selectedItem.value.content = mindmapData.content
+    
+    // 只更新列表中的对应项，不重新加载整个列表
+    const itemInList = items.value.find(item => item.id === selectedItem.value.id)
+    if (itemInList) {
+      itemInList.title = mindmapData.title
+      itemInList.content = mindmapData.content
+    }
+    
+    // ❌ 不要刷新列表，会导致思维导图重新渲染
+    // await loadItems()
+  } catch (error) {
+    console.error('保存思维导图失败:', error)
+    ElMessage.error('保存失败')
   }
 }
 
@@ -1801,7 +2123,7 @@ watch(() => [props.contentType, props.categoryId], () => {
 
 .outline-item.active {
   background: #e7f1f7;
-  border-left: 3px solid #1890ff;
+  /* border-left: 3px solid #1890ff; */
   padding-left: 5px;
 }
 

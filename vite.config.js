@@ -9,6 +9,10 @@ export default defineConfig({
       '@': path.resolve(__dirname, 'src')
     }
   },
+  define: {
+    // 修复 sockjs-client 的 global is not defined 错误
+    global: 'globalThis'
+  },
   server: {
     proxy: {
       '/api': {
